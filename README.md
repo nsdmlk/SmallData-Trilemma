@@ -1,4 +1,4 @@
-# Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes
+![Small Data Machine Learning](Header.png)
 
 The study examines how model selection, target corruption and interval calibration affect predictions on small tabular datasets. It compares fixed configurations of SmallGBM and SmallMLP with task-specific baselines. [Manuscript (PDF)](Paper.pdf) · [LaTeX source](paper.tex)
 
