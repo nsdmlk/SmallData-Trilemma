@@ -1,27 +1,31 @@
-![Small Data Machine Learning](Header.png)
+# Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes
 
-> Machine learning on small tabular datasets ($n < 1000$) is governed by the **Trilemma of Small Data Learning**: the inability to simultaneously achieve low variance, low bias, and calibrated uncertainty without depleting scarce training signals via validation splits.
+The study examines how model selection, target corruption and interval calibration affect predictions on small tabular datasets. It compares fixed configurations of SmallGBM and SmallMLP with task-specific baselines. [Manuscript (PDF)](Paper.pdf) · [LaTeX source](paper.tex)
 
-## Abstract
+## Findings
 
-This work formalizes the mathematical bottlenecks of low-sample tabular learning and evaluates two targeted, zero-tuning algorithmic baselines as case studies:
+- At 100 training observations, five-fold cross-validation overstated the gain from selecting XGBoost hyperparameters by 0.063 ROC-AUC on random labels. On the Gaussian task, tuning improved independent-test ROC-AUC by 0.0078 after refitting.
+- On a Gaussian mixture with linear log odds, untuned logistic regression had the highest mean ROC-AUC at all seven sizes. On the measured grid, XGBoost-50 first passed SmallGBM in mean ROC-AUC at 1,000 observations, and XGBoost-200 at 2,000. [Gaussian trials](results/revised_figures/gaussian/)
+- At 20% random binary label flips, the median within-trial ROC-AUC loss was 0.0210 for SmallGBM and 0.0778 for fixed XGBoost-200. Under Cauchy response corruption, the absolute-error XGBoost regressor attained mean MAE 1.732 at 20%. [Corruption trials](results/revised_figures/corruption/)
+- With a 90% target and 38 calibration observations, ordinary split conformal used the 36th sorted residual. At 10 features, its coverage/mean width was 91.5%/5.410 versus 92.7%/5.575 with local weights. At 100 features the corresponding results were 93.2%/8.064 and 94.3%/8.550. Weighted intervals covered 87.4% of high-noise observations at 10 features. Their coverage is an empirical result. [Interval results](results/conformal_uq/20261121-135012-812880/)
+- On six public datasets, a linear baseline led on Hepatitis, Breast Cancer and Energy Efficiency. XGBoost led on Ionosphere and Yacht, and SmallGBM on Parkinson's. Results use three repeats of five-fold cross-validation and preserve subject/design groups where applicable. [Scores, predictions and splits](results/real_datasets/)
+- A 45-setting width sensitivity check on Iris, Wine and Statlog Heart gave mean accuracy 0.9233 at the existing coefficients (6, 0.7). The best cell on this fixed set of folds scored 0.9288. [Development grid and folds](results/meta_training/20261121-135431-895422/)
 
-1. **SmallGBM** (Robust Classification): Combines size-adaptive median leaf aggregation, MAD empirical Bayes shrinkage, and stochastic split selection.
-2. **SmallMLP** (Nonlinear Regression and UQ): A two-layer bottleneck network governed by deterministic capacity scaling rules $(n, d, K)$ and locally weighted split conformal prediction.
+## Reproduce the comparisons
 
-## Key Contributions
+Run the notebooks in [benchmarks](benchmarks/) for cross-validation, Gaussian classification, target corruption and network depth. Each records its protocol. From the repository root the following commands reproduce the interval, dataset and width experiments.
 
-* **The Trilemma of Small Data.** Formalizing why standard algorithms fail without validation tuning (high variance, unbounded influence functions, signal depletion).
-* **Targeted Solutions.** Zero-tuning algorithmic designs that mathematically bound variance and outlier influence.
-* **Strict Performance Boundaries.** Empirical scaling curves demonstrating exactly where standard models (XGBoost, AutoML, TabPFN) overtake our methods, identifying the $n \approx 800 - 1000$ phase transition.
-* **True Negative Results.** A transparent documentation of structural limitations (e.g., the asymptotic $\pi/2$ Gaussian efficiency penalty of median leaves, and $L_2$ sensitivity to extreme Cauchy outliers).
+```sh
+python benchmarks/conformal.py --jobs 2
+python benchmarks/real_datasets.py
+python benchmarks/alpha_beta_ablation_benchmark.py
+```
 
-## Empirical Findings
+The classifiers and regressors used SmallGBM 1.5.0, SmallMLP 0.4.0, XGBoost 3.4.1 and scikit-learn 1.9.1. Experiment-specific versions and seeds are recorded in the respective protocol files. For Overleaf, use `paper.tex` as the main file. We verified the included LaTeX project with Tectonic.
 
-* **The Validation Trap.** At $n=100$, standard 5-fold cross-validation hallucinates $+0.063$ ROC-AUC on pure null noise, while failing to match zero-tuning SmallGBM.
-* **Robustness to Corruption.** Under $20\%$ label corruption, SmallGBM reduces median AUC degradation by $3.7\times$ compared to XGBoost.
-* **The TabPFN Dimensionality Wall.** While TabPFN is dominant for $d \le 100$, it suffers accuracy collapse when forced to compress higher dimensions (PCA/Truncation). SmallMLP scales gracefully to $d=300$ natively.
-* **Heteroscedasticity and Coverage.** Under $6\times$ heteroscedasticity, conformal SmallMLP maintains valid $\ge 90\%$ finite-sample marginal coverage where parametric Gaussian Processes break down.
+## Impact
+
+In a small cohort, reusing the validation score that selected a model can exaggerate its expected gain. The interval experiment illustrates a separate decision risk: an overall coverage near 93% coincided with 87.4% in the high-noise group. Overall and subgroup coverage, interval width and the cost of missed cases all matter when deciding whether another measurement is needed. The clinical dataset results are retrospective and do not establish clinical benefit.
 
 ## Citation
 
@@ -35,24 +39,6 @@ If you use this paper or the associated code in your research, please cite it as
 }
 ```
 
-## Repositories
-
-The core implementations discussed in this paper are open-source, alongside the baseline frameworks used for rigorous zero-tuning benchmarking.
-
-**Proposed Methods:**
-
-* [SmallGBM](https://github.com/nsdmlk/SmallGBM) — Robust Gradient Boosting for $n < 1000$.
-* [SmallMLP](https://github.com/nsdmlk/SmallMLP) — Adaptive Neural Networks with Conformal Intervals.
-
-**Baselines & Evaluated Frameworks:**
-
-* [XGBoost](https://github.com/dmlc/xgboost) — Scalable Gradient Boosting.
-* [LightGBM](https://github.com/microsoft/LightGBM) — Fast, distributed gradient boosting.
-* [scikit-learn](https://github.com/scikit-learn/scikit-learn) — Machine Learning in Python.
-* [TabPFN](https://github.com/automl/TabPFN) — Prior-Data Fitted Networks.
-* [AutoGluon](https://github.com/autogluon/autogluon) — Automated machine learning.
-* [MAPIE](https://github.com/scikit-learn-contrib/MAPIE) — Conformal prediction framework.
-
 ## Acknowledgements
 
 This research was conducted independently during undergraduate studies at Beijing Institute of Technology (BIT).
@@ -62,3 +48,5 @@ This research was conducted independently during undergraduate studies at Beijin
 **Text and Figures:** This manuscript and all accompanying figures are licensed under the [Creative Commons Attribution 4.0 International License (CC-BY-4.0)](https://creativecommons.org/licenses/by/4.0/).
 
 **Code:** The benchmark scripts and source code in this repository are licensed under the [MIT License](https://opensource.org/licenses/MIT).
+
+The bundled LaTeX style is by George Kour. [Style license](arxiv-style-LICENSE.txt)

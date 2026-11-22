@@ -1,151 +1,186 @@
-import warnings
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+"""SmallMLP capacity sensitivity on three prespecified development datasets (Figure 7)."""
+import argparse
+import csv
+import hashlib
+import json
+import shutil
 import time
-from joblib import Parallel, delayed
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import accuracy_score
+from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timezone
+from importlib.metadata import version
+from itertools import product
+from pathlib import Path
+from urllib.request import urlopen
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.patches import Rectangle
 from sklearn.datasets import load_iris, load_wine
-from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
-from ucimlrepo import fetch_ucirepo
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import StratifiedKFold
 from smallmlp import SmallMLPClassifier
+from threadpoolctl import threadpool_limits
 
-warnings.filterwarnings("ignore")
+ROOT = Path(__file__).resolve().parent.parent
+ALPHAS = tuple(range(2, 11))
+BETAS = (0.5, 0.6, 0.7, 0.8, 0.9)
+SELECTED = (6, 0.7)
+SEED = 42
+N_FOLDS = 5
+HEART_URL = "https://archive.ics.uci.edu/static/public/145/data.csv"
+HEART_SHA256 = "440ab32cedbc4c3e0587439e48cccf1792a99323df35611b17f33adb140f6baf"
+METHOD = {"width_mode": "formula", "class_weight": None, "max_epochs": 500,
+          "patience": 30, "random_state": SEED}
 
-ALPHAS = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-BETAS = [0.5, 0.6, 0.7, 0.8, 0.9]
 
-def load_uciml(uid):
-    try:
-        ds = fetch_ucirepo(id=uid)
-        X_df = ds.data.features.select_dtypes(include=[np.number])
-        X = X_df.to_numpy(dtype=float)
-        y_raw = ds.data.targets.iloc[:, 0]
-        y = LabelEncoder().fit_transform(y_raw.astype(str))
-        if np.isnan(X).any():
-            X = SimpleImputer(strategy="median").fit_transform(X)
-        mask = np.isfinite(X).all(axis=1)
-        return X[mask], y[mask]
-    except Exception:
-        return None, None
+def load_development_data(cache):
+    iris, wine = load_iris(return_X_y=True), load_wine(return_X_y=True)
+    path = cache / "statlog_heart_145.csv"
+    if not path.exists():
+        with urlopen(HEART_URL, timeout=60) as response:
+            payload = response.read()
+        if hashlib.sha256(payload).hexdigest() != HEART_SHA256:
+            raise ValueError("UCI Statlog Heart file changed. Review the source before rerunning.")
+        cache.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    if hashlib.sha256(path.read_bytes()).hexdigest() != HEART_SHA256:
+        raise ValueError(f"Unexpected SHA-256 for {path}.")
+    matrix = np.genfromtxt(path, delimiter=",", skip_header=1)
+    heart = (matrix[:, :-1], matrix[:, -1].astype(int))
+    return {"Iris": iris, "Wine": wine, "Statlog (Heart)": heart}
 
-def get_meta_datasets():
-    datasets = []
-    datasets.append(("iris", load_iris().data, load_iris().target))
-    datasets.append(("wine", load_wine().data, load_wine().target))
-    
-    uci_ids = {
-        "sonar": 151,
-        "glass": 42,
-        "yeast": 110,
-        "heart_statlog": 145,
-        "blood_transfusion": 176,
-        "banknote": 267,
-        "segment": 50,
-        "vowel": 59,
-        "liver_disorders": 225,
-        "cmc": 30
-    }
-    
-    for name, uid in uci_ids.items():
-        X, y = load_uciml(uid)
-        if X is not None:
-            if len(y) > 1000:
-                rng = np.random.default_rng(42)
-                idx = rng.choice(len(y), 1000, replace=False)
-                X, y = X[idx], y[idx]
-            
-            if np.bincount(y).min() >= 5:
-                datasets.append((name, X, y))
-            
-    return datasets
 
-def eval_single_fold(alpha, beta, X, y, tr, te, seed):
-    clf = SmallMLPClassifier(
-        width_mode="formula", class_weight=None,
-        alpha=alpha, beta=beta,
-        max_epochs=500, patience=30, random_state=seed
-    )
-    clf.fit(X[tr], y[tr])
-    return accuracy_score(y[te], clf.predict(X[te]))
+def build_folds(datasets):
+    folds, assignments = {}, []
+    for name, (X, y) in datasets.items():
+        folds[name] = []
+        cv = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
+        for fold, (train, test) in enumerate(cv.split(X, y), start=1):
+            imputer = SimpleImputer(strategy="median", keep_empty_features=True)
+            x_train = imputer.fit_transform(X[train])
+            x_test = imputer.transform(X[test])
+            folds[name].append((x_train, y[train], x_test, y[test]))
+            assignments.extend({"dataset": name, "row_index_zero_based": int(i), "test_fold": fold}
+                               for i in test)
+    return folds, sorted(assignments, key=lambda row: (row["dataset"], row["row_index_zero_based"]))
 
-def eval_combination(alpha, beta, datasets, n_splits, seed):
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
-    ds_accs = []
-    
-    for ds_name, X, y in datasets:
-        fold_accs = Parallel(n_jobs=-1)(
-            delayed(eval_single_fold)(alpha, beta, X, y, tr, te, seed) 
-            for tr, te in skf.split(X, y)
-        )
-        ds_accs.append(np.mean(fold_accs))
-        
-    return {
-        "alpha": alpha,
-        "beta": beta,
-        "mean_acc": float(np.mean(ds_accs))
-    }
 
-def run_grid_search(n_splits=5, seed=42):
-    datasets = get_meta_datasets()
-    print(f"Running Meta-Training on {len(datasets)} strictly disjoint datasets:")
-    for n, X, y in datasets:
-        print(f"  - {n:<18} (n={len(y):>4}, d={X.shape[1]:>2}, K={len(np.unique(y)):>2})")
+def evaluate(task):
+    name, alpha, beta, folds = task
+    torch.set_num_threads(1)
+    rows = []
+    with threadpool_limits(limits=1):
+        for i, (x_train, y_train, x_test, y_test) in enumerate(folds, start=1):
+            model = SmallMLPClassifier(alpha=alpha, beta=beta, **METHOD)
+            model.fit(x_train, y_train)
+            rows.append({"dataset": name, "alpha": alpha, "beta": beta, "fold": i,
+                         "n_train": len(y_train), "n_test": len(y_test),
+                         "accuracy": float(accuracy_score(y_test, model.predict(x_test)))})
+    return rows
 
-    results = []
-    total_runs = len(ALPHAS) * len(BETAS)
-    current_run = 1
-    
-    start_time = time.time()
 
-    for alpha in ALPHAS:
-        for beta in BETAS:
-            print(f"[{current_run}/{total_runs}] alpha={alpha:<4.1f}, beta={beta:<3.1f} ...", end=" ", flush=True)
-            res = eval_combination(alpha, beta, datasets, n_splits, seed)
-            results.append(res)
-            
-            elapsed = time.time() - start_time
-            avg_time = elapsed / current_run
-            eta = avg_time * (total_runs - current_run)
-            
-            print(f"Mean Acc: {res['mean_acc']:.4f} | ETA: {eta/60:.1f}m")
-            current_run += 1
+def write_csv(file, rows):
+    with file.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=rows[0])
+        writer.writeheader()
+        writer.writerows(rows)
 
-    return pd.DataFrame(results)
 
-def plot_heatmap(df):
-    pivot = df.pivot(index="alpha", columns="beta", values="mean_acc")
-    
-    best_idx = np.unravel_index(np.argmax(pivot.values, axis=None), pivot.shape)
-    best_alpha = pivot.index[best_idx[0]]
-    best_beta = pivot.columns[best_idx[1]]
-    best_acc = pivot.values[best_idx]
+def summarize(runs, names):
+    cells = []
+    by_dataset = []
+    for alpha, beta in product(ALPHAS, BETAS):
+        scores = []
+        for name in names:
+            acc = [r["accuracy"] for r in runs
+                   if (r["dataset"], r["alpha"], r["beta"]) == (name, alpha, beta)]
+            assert len(acc) == N_FOLDS
+            mean = float(np.mean(acc))
+            by_dataset.append({"dataset": name, "alpha": alpha, "beta": beta, "mean_accuracy": mean})
+            scores.append(mean)
+        cells.append({"alpha": alpha, "beta": beta, "mean_accuracy": float(np.mean(scores))})
+    return cells, by_dataset
 
-    plt.figure(figsize=(10, 7))
-    sns.heatmap(pivot, annot=True, fmt=".4f", cmap="YlGnBu", 
-                cbar_kws={'label': 'Mean Accuracy on Meta-Training Set'})
-    
-    rect = plt.Rectangle((best_idx[1], best_idx[0]), 1, 1, fill=False, edgecolor='red', lw=3)
-    plt.gca().add_patch(rect)
-    
-    plt.title(f"Meta-Training Grid Search (Disjoint Set)\nBest: alpha={best_alpha}, beta={best_beta} (Acc={best_acc:.4f})", fontsize=14)
-    plt.xlabel("Beta (Depth Decay)", fontsize=12)
-    plt.ylabel("Alpha (Width Scale)", fontsize=12)
-    
-    plt.tight_layout()
-    plt.savefig("meta_training_heatmap.png", dpi=300)
-    plt.show()
-    
-    print("\n" + "="*50)
-    print(f"WINNER: Alpha={best_alpha}, Beta={best_beta}")
-    print(f"Accuracy: {best_acc:.4f}")
-    print("="*50)
-    
-    df.to_csv("meta_training_grid_results.csv", index=False)
+
+def plot_grid(cells, path):
+    values = np.array([r["mean_accuracy"] for r in cells]).reshape(len(ALPHAS), len(BETAS))
+    norm = matplotlib.colors.Normalize(values.min() - 0.001, values.max() + 0.001)
+    cmap = plt.get_cmap("Blues")
+    with plt.rc_context({"font.size": 9, "pdf.fonttype": 42}):
+        fig, ax = plt.subplots(figsize=(5.1, 4.15))
+        image = ax.imshow(values, cmap=cmap, norm=norm, aspect="auto")
+        for i in range(len(ALPHAS)):
+            for j in range(len(BETAS)):
+                text_color = "white" if norm(values[i, j]) > 0.66 else "#121722"
+                ax.text(j, i, f"{values[i, j]:.4f}", ha="center", va="center",
+                        color=text_color, fontsize=8)
+        i = ALPHAS.index(SELECTED[0]); j = BETAS.index(SELECTED[1])
+        ax.add_patch(Rectangle((j - 0.475, i - 0.475), 0.95, 0.95, fill=False,
+                               ec="#c33d23", lw=2.0))
+        ax.set_xticks(range(len(BETAS)), BETAS)
+        ax.set_yticks(range(len(ALPHAS)), ALPHAS)
+        ax.set_xlabel(r"Width decay $\beta$")
+        ax.set_ylabel(r"Initial width multiplier $\alpha$")
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(length=0)
+        bar = fig.colorbar(image, ax=ax, shrink=0.82)
+        bar.set_label("Mean accuracy")
+        fig.tight_layout()
+        fig.savefig(path)
+        fig.savefig(path.with_suffix(".png"), dpi=240)
+        plt.close(fig)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument("--data-dir", type=Path, default=ROOT / "data" / "meta_training")
+    args = parser.parse_args()
+    if args.jobs < 1:
+        parser.error("--jobs must be positive")
+    datasets = load_development_data(args.data_dir)
+    folds, assignments = build_folds(datasets)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+    out = ROOT / "results" / "meta_training" / stamp
+    out.mkdir(parents=True, exist_ok=False)
+    write_csv(out / "folds.csv", assignments)
+    tasks = [(name, alpha, beta, folds[name])
+             for alpha, beta in product(ALPHAS, BETAS) for name in datasets]
+    protocol = {
+        "datasets": {k: {"n": len(y), "d": X.shape[1], "classes": len(np.unique(y)),
+                         "missing_cells": int(np.isnan(X).sum())} for k, (X, y) in datasets.items()},
+        "sources": {"Iris": "sklearn.datasets.load_iris", "Wine": "sklearn.datasets.load_wine",
+                    "Statlog (Heart)": {"uci_id": 145, "url": HEART_URL, "sha256": HEART_SHA256}},
+        "alphas": ALPHAS, "betas": BETAS, "selected_before_run": SELECTED, "model": METHOD,
+        "split": "Five stratified shuffled folds (seed 42), fixed across all cells. Each fold fits its own median imputer.",
+        "score": "Arithmetic mean of five fold accuracies per dataset, then arithmetic mean across three datasets.",
+        "jobs": args.jobs, "versions": {p: version(p) for p in ("smallmlp", "scikit-learn", "numpy", "torch", "matplotlib")}}
+    (out / "protocol.json").write_text(json.dumps(protocol, indent=2) + "\n")
+    started = time.monotonic()
+    runs = []
+    with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+        for i, result in enumerate(pool.map(evaluate, tasks), start=1):
+            runs.extend(result)
+            if i % 9 == 0:
+                print(f"{i}/{len(tasks)} model settings by dataset in {time.monotonic()-started:.1f}s", flush=True)
+    write_csv(out / "runs.csv", runs)
+    cells, by_dataset = summarize(runs, datasets)
+    write_csv(out / "summary.csv", cells)
+    write_csv(out / "by_dataset.csv", by_dataset)
+    plot_grid(cells, out / "meta_grid_surface.pdf")
+    shutil.copyfile(out / "meta_grid_surface.pdf", ROOT / "meta_grid_surface.pdf")
+    shutil.copyfile(out / "meta_grid_surface.png", ROOT / "meta_grid_surface.png")
+    shutil.copyfile(out / "meta_grid_surface.png", ROOT / "benchmarks" / "meta_grid_surface4.3.1.png")
+    write_csv(ROOT / "meta_training_grid_results.csv",
+              [{"alpha": r["alpha"], "beta": r["beta"], "mean_acc": r["mean_accuracy"]}
+               for r in cells])
+    print(f"Saved {len(runs)} fits and Figure 7 in {out}")
+
 
 if __name__ == "__main__":
-    df = run_grid_search()
-    plot_heatmap(df)
+    main()

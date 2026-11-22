@@ -1,0 +1,50 @@
+{
+  "n_total": 150,
+  "n_test": 2000,
+  "n_fit": 112,
+  "n_cal": 38,
+  "alpha": 0.1,
+  "dims": [
+    10,
+    100
+  ],
+  "seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120
+  ],
+  "split_calibration_rank_one_based": 36,
+  "smallmlp_internal_early_stopping_fraction": 0.2,
+  "gp_optimizer_restarts": 2,
+  "max_epochs": 500,
+  "patience": 30,
+  "embedding": "SmallMLP's fitted backbone on its fitted input scaler, as in predict().",
+  "local_quantile": "Gaussian weights with median pairwise bandwidth and unit mass at infinity. Infinite local radii are capped at the largest calibration residual.",
+  "intervals": "Pointwise 95% Student t intervals across independent seeds. Paired differences use the same data and fitted SmallMLP.",
+  "jobs": 3,
+  "versions": {
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "scikit-learn": "1.9.1",
+    "scipy": "1.18.1",
+    "smallmlp": "0.4.0",
+    "matplotlib": "3.11.2"
+  }
+}

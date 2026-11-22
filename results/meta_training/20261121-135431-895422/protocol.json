@@ -1,0 +1,70 @@
+{
+  "datasets": {
+    "Iris": {
+      "n": 150,
+      "d": 4,
+      "classes": 3,
+      "missing_cells": 0
+    },
+    "Wine": {
+      "n": 178,
+      "d": 13,
+      "classes": 3,
+      "missing_cells": 0
+    },
+    "Statlog (Heart)": {
+      "n": 270,
+      "d": 13,
+      "classes": 2,
+      "missing_cells": 0
+    }
+  },
+  "sources": {
+    "Iris": "sklearn.datasets.load_iris",
+    "Wine": "sklearn.datasets.load_wine",
+    "Statlog (Heart)": {
+      "uci_id": 145,
+      "url": "https://archive.ics.uci.edu/static/public/145/data.csv",
+      "sha256": "440ab32cedbc4c3e0587439e48cccf1792a99323df35611b17f33adb140f6baf"
+    }
+  },
+  "alphas": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "betas": [
+    0.5,
+    0.6,
+    0.7,
+    0.8,
+    0.9
+  ],
+  "selected_before_run": [
+    6,
+    0.7
+  ],
+  "model": {
+    "width_mode": "formula",
+    "class_weight": null,
+    "max_epochs": 500,
+    "patience": 30,
+    "random_state": 42
+  },
+  "split": "Five stratified shuffled folds (seed 42), fixed across all cells. Each fold fits its own median imputer.",
+  "score": "Arithmetic mean of five fold accuracies per dataset, then arithmetic mean across three datasets.",
+  "jobs": 4,
+  "versions": {
+    "smallmlp": "0.4.0",
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "matplotlib": "3.11.2"
+  }
+}

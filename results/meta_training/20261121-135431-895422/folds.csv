@@ -1,0 +1,599 @@
+dataset,row_index_zero_based,test_fold
+Iris,0,2
+Iris,1,4
+Iris,2,4
+Iris,3,5
+Iris,4,2
+Iris,5,5
+Iris,6,3
+Iris,7,3
+Iris,8,4
+Iris,9,2
+Iris,10,2
+Iris,11,1
+Iris,12,4
+Iris,13,1
+Iris,14,1
+Iris,15,1
+Iris,16,5
+Iris,17,5
+Iris,18,5
+Iris,19,2
+Iris,20,1
+Iris,21,2
+Iris,22,3
+Iris,23,4
+Iris,24,4
+Iris,25,1
+Iris,26,5
+Iris,27,3
+Iris,28,4
+Iris,29,1
+Iris,30,3
+Iris,31,2
+Iris,32,4
+Iris,33,1
+Iris,34,3
+Iris,35,1
+Iris,36,5
+Iris,37,4
+Iris,38,3
+Iris,39,5
+Iris,40,2
+Iris,41,3
+Iris,42,2
+Iris,43,5
+Iris,44,3
+Iris,45,1
+Iris,46,5
+Iris,47,2
+Iris,48,3
+Iris,49,4
+Iris,50,3
+Iris,51,4
+Iris,52,1
+Iris,53,5
+Iris,54,5
+Iris,55,4
+Iris,56,3
+Iris,57,5
+Iris,58,2
+Iris,59,1
+Iris,60,2
+Iris,61,4
+Iris,62,5
+Iris,63,4
+Iris,64,3
+Iris,65,1
+Iris,66,3
+Iris,67,4
+Iris,68,2
+Iris,69,4
+Iris,70,3
+Iris,71,3
+Iris,72,3
+Iris,73,5
+Iris,74,2
+Iris,75,2
+Iris,76,5
+Iris,77,5
+Iris,78,1
+Iris,79,4
+Iris,80,2
+Iris,81,5
+Iris,82,2
+Iris,83,3
+Iris,84,4
+Iris,85,1
+Iris,86,5
+Iris,87,1
+Iris,88,4
+Iris,89,2
+Iris,90,2
+Iris,91,4
+Iris,92,1
+Iris,93,5
+Iris,94,1
+Iris,95,3
+Iris,96,2
+Iris,97,1
+Iris,98,3
+Iris,99,1
+Iris,100,1
+Iris,101,5
+Iris,102,1
+Iris,103,5
+Iris,104,3
+Iris,105,3
+Iris,106,2
+Iris,107,1
+Iris,108,2
+Iris,109,2
+Iris,110,2
+Iris,111,2
+Iris,112,1
+Iris,113,5
+Iris,114,2
+Iris,115,4
+Iris,116,3
+Iris,117,4
+Iris,118,3
+Iris,119,5
+Iris,120,2
+Iris,121,2
+Iris,122,4
+Iris,123,3
+Iris,124,1
+Iris,125,4
+Iris,126,3
+Iris,127,3
+Iris,128,4
+Iris,129,4
+Iris,130,1
+Iris,131,5
+Iris,132,3
+Iris,133,3
+Iris,134,5
+Iris,135,4
+Iris,136,2
+Iris,137,5
+Iris,138,1
+Iris,139,1
+Iris,140,3
+Iris,141,5
+Iris,142,4
+Iris,143,5
+Iris,144,1
+Iris,145,4
+Iris,146,5
+Iris,147,4
+Iris,148,1
+Iris,149,2
+Statlog (Heart),0,2
+Statlog (Heart),1,3
+Statlog (Heart),2,2
+Statlog (Heart),3,2
+Statlog (Heart),4,3
+Statlog (Heart),5,5
+Statlog (Heart),6,1
+Statlog (Heart),7,3
+Statlog (Heart),8,2
+Statlog (Heart),9,3
+Statlog (Heart),10,4
+Statlog (Heart),11,4
+Statlog (Heart),12,4
+Statlog (Heart),13,4
+Statlog (Heart),14,1
+Statlog (Heart),15,1
+Statlog (Heart),16,1
+Statlog (Heart),17,2
+Statlog (Heart),18,4
+Statlog (Heart),19,4
+Statlog (Heart),20,5
+Statlog (Heart),21,1
+Statlog (Heart),22,5
+Statlog (Heart),23,3
+Statlog (Heart),24,1
+Statlog (Heart),25,4
+Statlog (Heart),26,1
+Statlog (Heart),27,2
+Statlog (Heart),28,1
+Statlog (Heart),29,3
+Statlog (Heart),30,3
+Statlog (Heart),31,3
+Statlog (Heart),32,1
+Statlog (Heart),33,1
+Statlog (Heart),34,2
+Statlog (Heart),35,4
+Statlog (Heart),36,4
+Statlog (Heart),37,5
+Statlog (Heart),38,2
+Statlog (Heart),39,1
+Statlog (Heart),40,1
+Statlog (Heart),41,2
+Statlog (Heart),42,4
+Statlog (Heart),43,4
+Statlog (Heart),44,4
+Statlog (Heart),45,1
+Statlog (Heart),46,5
+Statlog (Heart),47,3
+Statlog (Heart),48,2
+Statlog (Heart),49,2
+Statlog (Heart),50,3
+Statlog (Heart),51,5
+Statlog (Heart),52,5
+Statlog (Heart),53,4
+Statlog (Heart),54,3
+Statlog (Heart),55,5
+Statlog (Heart),56,2
+Statlog (Heart),57,3
+Statlog (Heart),58,1
+Statlog (Heart),59,1
+Statlog (Heart),60,4
+Statlog (Heart),61,5
+Statlog (Heart),62,1
+Statlog (Heart),63,2
+Statlog (Heart),64,1
+Statlog (Heart),65,4
+Statlog (Heart),66,2
+Statlog (Heart),67,5
+Statlog (Heart),68,2
+Statlog (Heart),69,2
+Statlog (Heart),70,4
+Statlog (Heart),71,5
+Statlog (Heart),72,3
+Statlog (Heart),73,2
+Statlog (Heart),74,3
+Statlog (Heart),75,1
+Statlog (Heart),76,1
+Statlog (Heart),77,4
+Statlog (Heart),78,5
+Statlog (Heart),79,5
+Statlog (Heart),80,5
+Statlog (Heart),81,3
+Statlog (Heart),82,5
+Statlog (Heart),83,2
+Statlog (Heart),84,1
+Statlog (Heart),85,4
+Statlog (Heart),86,2
+Statlog (Heart),87,1
+Statlog (Heart),88,4
+Statlog (Heart),89,2
+Statlog (Heart),90,5
+Statlog (Heart),91,3
+Statlog (Heart),92,5
+Statlog (Heart),93,1
+Statlog (Heart),94,2
+Statlog (Heart),95,2
+Statlog (Heart),96,3
+Statlog (Heart),97,3
+Statlog (Heart),98,3
+Statlog (Heart),99,4
+Statlog (Heart),100,2
+Statlog (Heart),101,2
+Statlog (Heart),102,4
+Statlog (Heart),103,5
+Statlog (Heart),104,4
+Statlog (Heart),105,1
+Statlog (Heart),106,3
+Statlog (Heart),107,4
+Statlog (Heart),108,3
+Statlog (Heart),109,3
+Statlog (Heart),110,2
+Statlog (Heart),111,2
+Statlog (Heart),112,3
+Statlog (Heart),113,4
+Statlog (Heart),114,1
+Statlog (Heart),115,2
+Statlog (Heart),116,2
+Statlog (Heart),117,1
+Statlog (Heart),118,3
+Statlog (Heart),119,3
+Statlog (Heart),120,2
+Statlog (Heart),121,5
+Statlog (Heart),122,1
+Statlog (Heart),123,1
+Statlog (Heart),124,2
+Statlog (Heart),125,5
+Statlog (Heart),126,2
+Statlog (Heart),127,3
+Statlog (Heart),128,2
+Statlog (Heart),129,4
+Statlog (Heart),130,3
+Statlog (Heart),131,4
+Statlog (Heart),132,3
+Statlog (Heart),133,2
+Statlog (Heart),134,5
+Statlog (Heart),135,4
+Statlog (Heart),136,4
+Statlog (Heart),137,1
+Statlog (Heart),138,1
+Statlog (Heart),139,5
+Statlog (Heart),140,4
+Statlog (Heart),141,5
+Statlog (Heart),142,5
+Statlog (Heart),143,5
+Statlog (Heart),144,1
+Statlog (Heart),145,1
+Statlog (Heart),146,4
+Statlog (Heart),147,1
+Statlog (Heart),148,1
+Statlog (Heart),149,3
+Statlog (Heart),150,1
+Statlog (Heart),151,3
+Statlog (Heart),152,5
+Statlog (Heart),153,3
+Statlog (Heart),154,1
+Statlog (Heart),155,5
+Statlog (Heart),156,2
+Statlog (Heart),157,5
+Statlog (Heart),158,5
+Statlog (Heart),159,5
+Statlog (Heart),160,1
+Statlog (Heart),161,4
+Statlog (Heart),162,5
+Statlog (Heart),163,5
+Statlog (Heart),164,4
+Statlog (Heart),165,3
+Statlog (Heart),166,3
+Statlog (Heart),167,4
+Statlog (Heart),168,1
+Statlog (Heart),169,4
+Statlog (Heart),170,3
+Statlog (Heart),171,3
+Statlog (Heart),172,3
+Statlog (Heart),173,2
+Statlog (Heart),174,4
+Statlog (Heart),175,4
+Statlog (Heart),176,2
+Statlog (Heart),177,4
+Statlog (Heart),178,3
+Statlog (Heart),179,4
+Statlog (Heart),180,1
+Statlog (Heart),181,5
+Statlog (Heart),182,4
+Statlog (Heart),183,2
+Statlog (Heart),184,5
+Statlog (Heart),185,2
+Statlog (Heart),186,4
+Statlog (Heart),187,5
+Statlog (Heart),188,3
+Statlog (Heart),189,2
+Statlog (Heart),190,5
+Statlog (Heart),191,3
+Statlog (Heart),192,3
+Statlog (Heart),193,3
+Statlog (Heart),194,2
+Statlog (Heart),195,3
+Statlog (Heart),196,2
+Statlog (Heart),197,1
+Statlog (Heart),198,2
+Statlog (Heart),199,5
+Statlog (Heart),200,1
+Statlog (Heart),201,3
+Statlog (Heart),202,4
+Statlog (Heart),203,2
+Statlog (Heart),204,5
+Statlog (Heart),205,2
+Statlog (Heart),206,5
+Statlog (Heart),207,4
+Statlog (Heart),208,3
+Statlog (Heart),209,5
+Statlog (Heart),210,3
+Statlog (Heart),211,1
+Statlog (Heart),212,5
+Statlog (Heart),213,5
+Statlog (Heart),214,4
+Statlog (Heart),215,1
+Statlog (Heart),216,5
+Statlog (Heart),217,2
+Statlog (Heart),218,4
+Statlog (Heart),219,5
+Statlog (Heart),220,2
+Statlog (Heart),221,2
+Statlog (Heart),222,4
+Statlog (Heart),223,5
+Statlog (Heart),224,3
+Statlog (Heart),225,2
+Statlog (Heart),226,1
+Statlog (Heart),227,3
+Statlog (Heart),228,3
+Statlog (Heart),229,5
+Statlog (Heart),230,1
+Statlog (Heart),231,1
+Statlog (Heart),232,2
+Statlog (Heart),233,1
+Statlog (Heart),234,3
+Statlog (Heart),235,5
+Statlog (Heart),236,1
+Statlog (Heart),237,5
+Statlog (Heart),238,1
+Statlog (Heart),239,4
+Statlog (Heart),240,4
+Statlog (Heart),241,1
+Statlog (Heart),242,1
+Statlog (Heart),243,5
+Statlog (Heart),244,5
+Statlog (Heart),245,4
+Statlog (Heart),246,4
+Statlog (Heart),247,4
+Statlog (Heart),248,4
+Statlog (Heart),249,5
+Statlog (Heart),250,1
+Statlog (Heart),251,2
+Statlog (Heart),252,3
+Statlog (Heart),253,4
+Statlog (Heart),254,4
+Statlog (Heart),255,2
+Statlog (Heart),256,3
+Statlog (Heart),257,3
+Statlog (Heart),258,5
+Statlog (Heart),259,2
+Statlog (Heart),260,2
+Statlog (Heart),261,1
+Statlog (Heart),262,4
+Statlog (Heart),263,1
+Statlog (Heart),264,3
+Statlog (Heart),265,3
+Statlog (Heart),266,5
+Statlog (Heart),267,1
+Statlog (Heart),268,2
+Statlog (Heart),269,5
+Wine,0,1
+Wine,1,1
+Wine,2,3
+Wine,3,2
+Wine,4,4
+Wine,5,5
+Wine,6,5
+Wine,7,3
+Wine,8,4
+Wine,9,2
+Wine,10,5
+Wine,11,1
+Wine,12,4
+Wine,13,3
+Wine,14,1
+Wine,15,2
+Wine,16,1
+Wine,17,1
+Wine,18,5
+Wine,19,2
+Wine,20,3
+Wine,21,5
+Wine,22,4
+Wine,23,5
+Wine,24,2
+Wine,25,1
+Wine,26,3
+Wine,27,3
+Wine,28,2
+Wine,29,3
+Wine,30,3
+Wine,31,5
+Wine,32,4
+Wine,33,1
+Wine,34,3
+Wine,35,5
+Wine,36,4
+Wine,37,4
+Wine,38,3
+Wine,39,4
+Wine,40,1
+Wine,41,2
+Wine,42,1
+Wine,43,4
+Wine,44,4
+Wine,45,3
+Wine,46,2
+Wine,47,5
+Wine,48,1
+Wine,49,2
+Wine,50,2
+Wine,51,5
+Wine,52,2
+Wine,53,1
+Wine,54,4
+Wine,55,2
+Wine,56,3
+Wine,57,5
+Wine,58,4
+Wine,59,5
+Wine,60,5
+Wine,61,3
+Wine,62,2
+Wine,63,4
+Wine,64,5
+Wine,65,1
+Wine,66,3
+Wine,67,5
+Wine,68,2
+Wine,69,4
+Wine,70,3
+Wine,71,2
+Wine,72,4
+Wine,73,4
+Wine,74,3
+Wine,75,4
+Wine,76,1
+Wine,77,5
+Wine,78,5
+Wine,79,1
+Wine,80,2
+Wine,81,2
+Wine,82,2
+Wine,83,1
+Wine,84,3
+Wine,85,4
+Wine,86,1
+Wine,87,4
+Wine,88,3
+Wine,89,1
+Wine,90,1
+Wine,91,3
+Wine,92,1
+Wine,93,5
+Wine,94,4
+Wine,95,2
+Wine,96,5
+Wine,97,2
+Wine,98,4
+Wine,99,2
+Wine,100,2
+Wine,101,5
+Wine,102,2
+Wine,103,4
+Wine,104,5
+Wine,105,2
+Wine,106,3
+Wine,107,1
+Wine,108,5
+Wine,109,1
+Wine,110,3
+Wine,111,5
+Wine,112,2
+Wine,113,2
+Wine,114,3
+Wine,115,5
+Wine,116,5
+Wine,117,3
+Wine,118,4
+Wine,119,1
+Wine,120,1
+Wine,121,1
+Wine,122,3
+Wine,123,4
+Wine,124,3
+Wine,125,3
+Wine,126,4
+Wine,127,1
+Wine,128,4
+Wine,129,5
+Wine,130,3
+Wine,131,5
+Wine,132,1
+Wine,133,2
+Wine,134,3
+Wine,135,3
+Wine,136,5
+Wine,137,2
+Wine,138,2
+Wine,139,3
+Wine,140,1
+Wine,141,4
+Wine,142,5
+Wine,143,4
+Wine,144,4
+Wine,145,1
+Wine,146,1
+Wine,147,3
+Wine,148,3
+Wine,149,4
+Wine,150,2
+Wine,151,5
+Wine,152,4
+Wine,153,3
+Wine,154,3
+Wine,155,5
+Wine,156,1
+Wine,157,2
+Wine,158,2
+Wine,159,1
+Wine,160,4
+Wine,161,2
+Wine,162,2
+Wine,163,5
+Wine,164,4
+Wine,165,2
+Wine,166,1
+Wine,167,3
+Wine,168,5
+Wine,169,3
+Wine,170,1
+Wine,171,5
+Wine,172,1
+Wine,173,2
+Wine,174,4
+Wine,175,5
+Wine,176,1
+Wine,177,4

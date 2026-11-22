@@ -1,0 +1,27 @@
+We evaluated three fixed configurations on each dataset using five outer folds repeated with seeds 11, 29 and 47. Within each repeat, all three models used the same folds. The linear baseline was standardized logistic regression ($C=1$) for classification or ridge regression (penalty 1) for regression. The tree baseline used XGBoost's library defaults. The third model was SmallGBM for classification and SmallMLP for regression. Imputation, encoding and scaling used the outer training fold. For Energy we predicted heating load and excluded cooling load.
+
+Classification splits were stratified over the splitting units. Duplicate Ionosphere predictor vectors shared a fold. Parkinson's recordings were grouped by subject identifier, with each subject's held-out probabilities averaged before computing ROC-AUC. The released file contains 32 distinct identifier prefixes, although the UCI description reports 31 participants. For Yacht and Energy we held out entire hull or building geometries, respectively. For each repeat we pooled out-of-fold predictions to obtain one metric. Table~\ref{tab:real_data} reports the arithmetic mean across repeats. The repeats reuse observations, and the few independent subjects or designs limit the precision of these estimates.
+
+\begin{table}[H]
+\centering
+\caption{Performance on public datasets. Dataset names link to the UCI source. The last column uses the SmallGBM classifier or SmallMLP regressor. Bold marks the best observed mean within each row.}
+\label{tab:real_data}
+\small
+\begin{tabular}{@{}lrrlrrr@{}}
+\toprule
+Dataset & Rows & Features & Split units & Linear & XGBoost & Small model\\
+\midrule
+\multicolumn{7}{@{}l}{\textit{Classification, ROC-AUC (higher is better)}}\\
+\href{https://doi.org/10.24432/C5Q59J}{Hepatitis} & 155 & 19 & 155 rows & \textbf{0.850} & 0.822 & 0.758\\
+\href{https://doi.org/10.24432/C5DW2B}{Breast Cancer (WDBC)} & 569 & 30 & 569 rows & \textbf{0.995} & 0.993 & 0.987\\
+\href{https://doi.org/10.24432/C5W01B}{Ionosphere} & 351 & 34 & 350 vectors & 0.896 & \textbf{0.967} & 0.931\\
+\href{https://doi.org/10.24432/C59C74}{Parkinson's} & 195 & 22 & 32 subject IDs & 0.734 & 0.757 & \textbf{0.778}\\
+\addlinespace
+\multicolumn{7}{@{}l}{\textit{Regression, MAE in each target's units (lower is better)}}\\
+\href{https://doi.org/10.24432/C5XG7R}{Yacht Hydrodynamics} & 308 & 6 & 22 hulls & 7.148 & \textbf{0.571} & 1.459\\
+\href{https://doi.org/10.24432/C51307}{Energy Efficiency} & 768 & 8 & 12 geometries & \textbf{3.735} & 6.325 & 5.513\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The linear model had the best observed mean on Hepatitis, Breast Cancer and Energy. XGBoost led on Ionosphere and Yacht, and SmallGBM led on Parkinson's. The point differences on Breast Cancer were small. These are retrospective benchmarks. Earlier SmallMLP development scripts included the six datasets, with Breast Cancer also used in an architecture ablation. An independently collected cohort would provide a stronger test of transfer.

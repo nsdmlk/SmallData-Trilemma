@@ -1,3 +1,5 @@
+> **Archived planning document.** This file records the original hypotheses. The [revised manuscript](Paper.pdf) and [results summary](README.md) report the experiments and their outcomes.
+
 # Experiment & Benchmark Plan (Pre-print)
 
 ## 1. What graphs/tables we need

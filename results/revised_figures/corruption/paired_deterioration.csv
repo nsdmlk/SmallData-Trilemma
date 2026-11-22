@@ -1,0 +1,31 @@
+task,model,corruption_pct,measure,median_paired_loss,matched_seeds
+regression,SmallMLP,0,mae_delta,0.0,10
+regression,SmallMLP,1,mae_delta,0.14017616321847792,10
+regression,SmallMLP,5,mae_delta,0.9771412714738154,10
+regression,SmallMLP,10,mae_delta,1.2885583443514497,10
+regression,SmallMLP,20,mae_delta,2.533627368868527,10
+regression,XGBoost squared,0,mae_delta,0.0,10
+regression,XGBoost squared,1,mae_delta,0.044285915167503576,10
+regression,XGBoost squared,5,mae_delta,0.744873654225397,10
+regression,XGBoost squared,10,mae_delta,1.6464997341603778,10
+regression,XGBoost squared,20,mae_delta,7.813589484080321,10
+regression,XGBoost absolute,0,mae_delta,0.0,10
+regression,XGBoost absolute,1,mae_delta,-0.0006156794801215337,10
+regression,XGBoost absolute,5,mae_delta,0.024117059563697807,10
+regression,XGBoost absolute,10,mae_delta,0.04795353846911843,10
+regression,XGBoost absolute,20,mae_delta,0.14100044587633498,10
+regression,Median constant,0,mae_delta,0.0,10
+regression,Median constant,1,mae_delta,-0.00040315506168564497,10
+regression,Median constant,5,mae_delta,-0.0002802519165538975,10
+regression,Median constant,10,mae_delta,0.002520226308406315,10
+regression,Median constant,20,mae_delta,0.0020070647051233514,10
+classification,SmallGBM,0,auc_drop,0.0,10
+classification,SmallGBM,1,auc_drop,0.00110239457109379,10
+classification,SmallGBM,5,auc_drop,0.002387434869957572,10
+classification,SmallGBM,10,auc_drop,0.005261004985116335,10
+classification,SmallGBM,20,auc_drop,0.02098745816668801,10
+classification,XGBoost classifier,0,auc_drop,0.0,10
+classification,XGBoost classifier,1,auc_drop,0.0014480854119584552,10
+classification,XGBoost classifier,5,auc_drop,0.015674691558327125,10
+classification,XGBoost classifier,10,auc_drop,0.027611585899333768,10
+classification,XGBoost classifier,20,auc_drop,0.07776675876555489,10

@@ -1,9 +1,7 @@
 \documentclass{article}
 
 \usepackage{arxiv}
-\usepackage[utf8]{inputenc} % allow utf-8 input
 \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-\usepackage{hyperref}       % hyperlinks
 \usepackage{url}            % simple URL typesetting
 \usepackage{booktabs}       % professional-quality tables
 \usepackage{amsfonts}       % blackboard math symbols
@@ -12,6 +10,7 @@
 \usepackage{microtype}      % microtypography
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage[hidelinks]{hyperref}
 
 \raggedbottom
 
@@ -34,72 +33,80 @@
 \footnotetext[1]{Corresponding author.}
 
 \begin{abstract}
-Machine learning on small tabular datasets ($n < 1000$) is governed by the \textit{Trilemma of Small Data Learning}: the inability to simultaneously achieve low variance, low bias, and calibrated uncertainty without depleting scarce training signals via validation splits. Rather than proposing a universal framework, this paper formalizes these mathematical bottlenecks and evaluates two lightweight, zero-tuning algorithmic baselines as case studies alongside existing targeted paradigms such as pre-trained in-context tabular foundation models (TabPFN / TabPFN v2). For robust classification, we analyze SmallGBM, which combines size-adaptive median leaf aggregation, MAD empirical Bayes shrinkage, and stochastic split selection. For nonlinear regression and multiclass tasks, we evaluate SmallMLP, a two-layer bottleneck network governed by deterministic capacity scaling rules ($n, d, K$) and locally weighted split conformal prediction over its penultimate embeddings. Our benchmarks compare the models with XGBoost and Gaussian processes under specific data conditions: at $n = 100$, five-fold cross-validation overstates the gain from tuning XGBoost by 0.063 ROC-AUC on independent random labels; on a Gaussian mixture, the mean ROC-AUC ranking relative to SmallGBM reverses between $n=500$ and $1000$ for 50-tree XGBoost and between $n=1000$ and $2000$ for 200-tree XGBoost; under $20\%$ label corruption, SmallGBM reduces median AUC degradation by $3.7\times$; and in a regression experiment with a sixfold difference in noise scale, the locally weighted SmallMLP intervals covered $92.7\%$ of test responses at $d=10$ and $94.3\%$ at $d=100$, against a $90\%$ target. Finally, we explicitly document structural negative results—including the asymptotic $\pi/2$ variance ratio of the sample median to the sample mean under Gaussian sampling, the gap to Bayes ROC-AUC at the largest training size, and $L_2$ sensitivity to extreme Cauchy outliers—providing an empirically grounded foundation for low-sample tabular learning.
+Small tabular datasets leave few observations for choosing a model and assessing its predictions. We examine these competing demands in controlled simulations and on six public datasets, using SmallGBM and SmallMLP as fixed-configuration case studies. Three results illustrate why the choice of evaluation matters. First, at $n=100$, five-fold cross-validation overstated the gain from tuning XGBoost by 0.063 ROC-AUC on random labels, while tuning improved independent-test ROC-AUC by 0.0078 on a Gaussian mixture. Second, when 20\% of binary training labels were flipped, the median within-trial ROC-AUC loss was 0.0210 for SmallGBM and 0.0778 for a fixed 200-tree XGBoost configuration. A separate regression experiment showed the sensitivity of squared-error training to heavy-tailed responses. Third, in a heteroscedastic regression experiment, locally weighted SmallMLP intervals covered about one percentage point more test responses than ordinary split conformal intervals at both tested dimensions. Their mean widths also increased. On a Gaussian classification task with linear log odds, logistic regression achieved the highest mean ROC-AUC at all seven training sizes. These experiments identify settings in which a small-data model helps and quantify the cost of its assumptions.
 \end{abstract}
 
-\section{Introduction: The Small Data Paradigm}
+\section{Introduction}
 
-For the past two decades, the trajectory of machine learning has been overwhelmingly defined by the "big data" paradigm. Success stories in computer vision \cite{krizhevsky2012imagenet, he2016deep}, natural language processing \cite{devlin2018bert, brown2020language}, and tabular prediction \cite{shwartz2022tabular} are predicated on the availability of massive datasets where highly parameterized models can approximate arbitrarily complex functions. However, a vast array of critical scientific and industrial problems do not operate in this regime. In clinical medicine \cite{warnat2021swarm, rajkomar2018scalable}, materials science \cite{ramprasad2017machine, schmidt2019recent}, and high-energy physics \cite{guest2018deep, radovic2018machine}, data acquisition is inherently bottlenecked by physical or financial constraints, yielding datasets with fewer than 1000 samples. In these high-stakes domains, algorithms must adapt to strict data limits rather than relying on scale.
+When observations are expensive to acquire, a practitioner must decide how much data to spend on fitting, model selection and assessment. We use the term \emph{trilemma} as an organizing framework for three objectives: limiting estimation variance, controlling approximation bias and quantifying uncertainty. The appropriate trade-off depends on the data-generating process and on the metric used to compare predictions.
 
-To address tabular data, a substantial body of literature has established gradient-boosted decision trees as the prevailing state-of-the-art. Implementations such as XGBoost \cite{chen2016xgboost}, LightGBM \cite{ke2017lightgbm}, and CatBoost \cite{prokhorenkova2018catboost} consistently outperform alternative methods on medium-to-large tabular datasets \cite{grinsztajn2022tree, borisov2022deep}. These frameworks utilize second-order Taylor approximations for leaf weight estimation. While robust alternatives (e.g., Huber loss, mean absolute error) exist within these libraries, their default mean-based ERM estimators remain highly sensitive to heavy-tailed noise and outliers \cite{huber2004robust, hampel1986robust}. Crucially, selecting the appropriate robust loss function and configuring its thresholds—alongside coordinating depth and regularization—strictly depends on hyperparameter tuning via validation splits \cite{feurer2015efficient, bergstra2012random}. On scarce data, this validation process inevitably breaks down.
+Boosted trees and regularized neural networks are established methods for tabular prediction \cite{chen2016xgboost,ke2017lightgbm,kadra2021well,grinsztajn2022tree}. With a small validation sample, searching a set of configurations can favor those that happened to score well on that sample \cite{cawley2010selection,varoquaux2018cross}. This makes two questions worth distinguishing. How well does validation estimate the gain from tuning? How much does the configuration selected by that search improve predictions after refitting on all available training data?
 
-Parallel literature has extensively explored deep learning adaptations for tabular data. Recent advances include specialized attention mechanisms (e.g., TabNet \cite{arik2021tabnet}, SAINT \cite{somepalli2021saint}), differentiable trees (NODE \cite{popov2019neural}), and heavily regularized multi-layer perceptrons \cite{gorishniy2021revisiting, kadra2021well}. While these models offer smooth function approximation, they require extensive neural architecture search, exacerbating the depletion of training data in low-sample regimes. Additionally, standard architectures lack native uncertainty quantification (UQ). While Bayesian Neural Networks \cite{neal2012bayesian}, Deep Ensembles \cite{lakshminarayanan2017simple}, and Gaussian Processes \cite{williams2006gaussian} provide principled UQ, they frequently suffer from kernel degeneracy and Type-II maximum likelihood overfitting when dimensionality approaches the sample size ($d \approx n$).
+We examine these questions using two fixed-configuration estimators. SmallGBM combines randomized split selection with robust aggregation of classification residuals. SmallMLP uses dataset size and dimensionality to set its architecture and regularization. A third question arises when using its predictions to construct intervals: how do interval width, overall coverage and coverage in a high-noise subgroup change when calibration residuals receive local weights? We compare the models on paired synthetic trials and on six public classification and regression datasets. The controlled trials vary sample size, target contamination and noise scale, while the dataset comparisons measure performance under specified splitting protocols.
 
-Recently, in-context tabular foundation models have emerged as a prominent targeted solution to bypass validation tuning entirely. Most notably, Prior-Data Fitted Networks (TabPFN) \cite{hollmann2022tabpfn, muller2021transformers}—and its second-generation extension, TabPFN v2 \cite{hollmann2025tabpfn}—achieve strong zero-shot performance on both classification and regression (scaling to hundreds of features) by performing amortized approximate Bayesian inference via a Transformer pre-trained on synthetic structural causal models. However, this foundation-model paradigm relies on heavyweight pre-trained architectures and produces posterior predictive distributions whose calibration remains inherently prior-dependent, lacking distribution-free, finite-sample coverage guarantees under severe prior mismatch or heavy-tailed contamination. Ordinary split conformal prediction provides finite-sample marginal coverage under exchangeability \cite{vovk2005algorithmic, shafer2008tutorial}. Extensions provide adaptive intervals using quantile regression \cite{romano2019conformalized} or address covariate shift using likelihood-ratio weights \cite{tibshirani2019conformal}. Section~\ref{sec:uq} distinguishes the guarantee for unweighted intervals from the empirical evaluation of our distance-weighted intervals.
+\subsection*{Related work}
 
-This structural gap is rooted in the inherent limitations of standard model selection. When minimizing empirical risk on small data ($n < 1000$), extracting a validation set to constrain the hypothesis class dangerously depletes the scarce training signal \cite{varoquaux2018cross, brain2002effect}. The resulting selection bias and validation set overfitting dominate the optimization process \cite{dwork2015reusable}, meaning the configuration that minimizes validation loss frequently exploits random sample fluctuations rather than identifying a true generalizable signal.
+Several approaches to tabular prediction make model complexity a choice during training. TabNet uses sequential attention to select features for each observation \cite{arik2021tabnet}. A comparison of residual networks, tabular Transformers and boosted trees found that their relative performance varied across tasks under a common evaluation protocol \cite{gorishniy2021revisiting}. Automated systems can also combine models. Auto-sklearn uses prior evaluations to initialize a search over pipelines \cite{feurer2015automl}, whereas AutoGluon-Tabular combines predictors through multilayer stacking \cite{erickson2020autogluon}. Our controlled search experiment examines a single part of this process, the gain estimated when selecting among configurations of one model family.
 
-The aim of this paper is to formalize these fundamental bottlenecks of small tabular data and to present targeted, pre-tuned algorithmic baselines. In order to do this, we introduce two case studies: SmallGBM, which utilizes size-adaptive leaf aggregation and stochastic split selection for robust classification; and SmallMLP, an adaptive neural network that employs empirically validated capacity scaling rules based on dataset constraints ($n, d, K$) alongside locally weighted prediction intervals whose coverage we evaluate on held-out data. Through rigorous zero-tuning benchmarks, we establish the strict performance boundaries of these methods, providing a grounded, empirically robust foundation for extreme low-sample learning.
+Uncertainty estimates can come from a Gaussian process posterior \cite{rasmussen2006gpml} or an ensemble of independently trained neural networks \cite{lakshminarayanan2017ensembles}. Conformalized quantile regression calibrates fitted conditional quantiles and can vary interval width with the input \cite{romano2019cqr}. Our interval experiment instead holds the fitted regression function fixed and varies how calibration residuals contribute to the interval radius.
+
+The relevant sampling unit depends on the scientific question. Materials informatics draws on both measured and computed properties \cite{ramprasad2017materials}, and particle-physics analyses use detector measurements for tasks such as separating signal events from background \cite{radovic2018physics}. In the public-data experiments below, we specify whether a held-out prediction concerns a new observation, a new patient or a new physical design.
 
 \section{Fundamental Bottlenecks and Mathematical Principles}
 \label{sec:theory}
 
-To rigorously approach learning on $n < 1000$, we must separate incidental engineering issues from fundamental mathematical bottlenecks. Standard algorithms fail in this regime due to the \textit{Trilemma of Small Data Learning}: the inability to simultaneously achieve low variance, low bias, and calibrated uncertainty without depleting the training set for validation tuning. In this section, we formalize these bottlenecks and define the mathematical principles used by our targeted solutions.
+We describe the loss derivatives, validation estimates and prediction intervals used in the experiments. Each result below states its sampling assumptions.
 
 \subsection{Vulnerability to Outliers and Robust Estimation}
-Modern gradient boosting implementations (e.g., XGBoost, LightGBM) utilize a second-order Taylor approximation of the loss. For a leaf node with instance set $I$, the optimal weight is given by:
+For a fixed leaf with sample index set $I$, the regularized second-order update for XGBoost with $L_2$ leaf penalty $\lambda$ is \cite{chen2016xgboost}
 \begin{equation}
 \label{eq:taylor_leaf}
 w^* = -\frac{\sum_{i \in I} g_i}{\sum_{i \in I} h_i + \lambda}
 \end{equation}
-While more stable than a simple empirical mean, this estimator remains non-robust. Under severe label noise, the numerator $\sum_{i \in I} g_i$ exhibits an unbounded influence function, allowing a single extreme outlier to shift the leaf weight arbitrarily far, yielding an asymptotic breakdown point of zero.
+where $g_i$ and $h_i$ are the first and second derivatives with respect to the current score. For squared-error regression, $g_i=\widehat y_i-y_i$ and $h_i=1$, so a single arbitrarily large response can move the update arbitrarily far. For binary logistic loss, $g_i=p_i-y_i$ lies in $[-1,1]$ and $h_i=p_i(1-p_i)$. Flipping a binary label changes its gradient by one in magnitude at a fixed prediction. Effects on later splits and scores depend on the fitted ensemble.
 
-To overcome this, robust statistics must be integrated directly into the estimators. SmallGBM replaces this mean-based approach with a sample median of the pseudo-residuals $r_i$ for small leaves ($|I| \le 30$):
-\begin{equation}
-\label{eq:median_leaf}
-\hat{w}_{\text{leaf}} = \operatorname{median}_{i \in I}(r_i)
+SmallGBM 1.5.0 fits classification pseudo-residuals $r_i=y_i-p_i$. Let $m_I$ be their median within a nonempty node and $s_0>0$ the prior scale (default $0.5$). The native implementation computes the node center $c_I$ as
+\begin{equation}\label{eq:median_leaf}
+c_I=\begin{cases}
+m_I,& |I|\leq30,\\
+\sum_{i\in I} a_i r_i / \sum_{i\in I} a_i,& |I|>30,
+\end{cases}
+\qquad a_i=(|r_i-m_I|+s_0)^{-1}.
 \end{equation}
-This leverages a local 50\% breakdown point to strictly bound the influence function against isolated noise spikes, before transitioning to an inverse-distance weighted mean based on feature-space proximity for larger leaves ($|I| > 30$) to recover statistical efficiency. Furthermore, to stabilize noisy splits without allowing outliers to inflate variance estimates, SmallGBM applies empirical Bayes shrinkage toward the parent node weight $\hat{w}_{\text{parent}}$ using the Median Absolute Deviation (MAD):
+For small nodes, the scale $s_I$ is $1.4826$ times the median absolute deviation about $m_I$, with $s_I=s_0$ when that deviation is zero. For larger nodes it is the weighted standard deviation about $c_I$ using the same weights $a_i$. The update shrinks the center toward the parent value $w_P$:
 \begin{equation}
 \label{eq:mad_shrinkage}
-\hat{\sigma}_{\text{leaf}} = 1.4826 \cdot \operatorname{median}_{i \in I} \left| r_i - \operatorname{median}_{j \in I}(r_j) \right|, \quad \hat{w}_{\text{final}} = (1 - \gamma)\hat{w}_{\text{leaf}} + \gamma \hat{w}_{\text{parent}}
+u_I=\frac{s_I^2}{|I|s_0^2},\qquad
+\gamma_I=\frac{u_I^{3/2}}{1+u_I^{3/2}},\qquad
+w_I=(1-\gamma_I)c_I+\gamma_I w_P.
 \end{equation}
-where $\gamma = (\hat{\sigma}_{\text{leaf}}^2 / |I|) / (\sigma_{\text{prior}}^2 + \hat{\sigma}_{\text{leaf}}^2 / |I|)$ adaptively shrinks high-dispersion leaves toward the parent estimate.
+The finite-sample resistance of a median to extreme observations concerns a fixed node \cite{huber2009robust}. An ensemble also learns its node boundaries and re-estimates residuals after each tree. Section~\ref{sec:heavy_tailed_noise} evaluates the complete classifiers under label flips.
 
-\subsection{The Hyperparameter Trap and Adaptive Complexity}
-Standard model selection relies on validation splits. In the low-sample regime, partitioning data is mathematically destructive. Furthermore, hyperparameter tuning over a grid $\Lambda$ requires evaluating empirical risk on a held-out validation set of size $n_{\text{val}}$. The maximum deviation between the validation error $\hat{R}_{\text{val}}(\lambda)$ and the true risk $R(\lambda)$ scales as:
+\subsection{Validation Uncertainty and Adaptive Complexity}
+Consider a finite set $\Lambda$ of predictors chosen independently of a hold-out sample. If the validation observations are independent and identically distributed and the per-observation loss lies in $[0,1]$, Hoeffding's inequality and a union bound give, with probability at least $1-\delta$,
 \begin{equation}
 \label{eq:val_bound}
-\sup_{\lambda \in \Lambda} \left|\hat{R}_{\text{val}}(\lambda) - R(\lambda)\right| = \mathcal{O}\left( \sqrt{\frac{\log |\Lambda|}{n_{\text{val}}}} \right)
+\sup_{\lambda\in\Lambda}|\widehat R_{\rm val}(\lambda)-R(\lambda)|
+\leq \sqrt{\frac{\log(2|\Lambda|/\delta)}{2n_{\rm val}}}.
 \end{equation}
-When $n_{\text{val}}$ is small, this selection bias and validation set overfitting dominate the optimization process, meaning the selected configuration frequently exploits validation noise rather than identifying a true generalizable signal.
+This bound describes a single independent validation sample. ROC-AUC compares pairs of observations, and the training folds in cross-validation overlap. We therefore estimate selection optimism in Section~\ref{sec:tuning_trap} using independent test data and matched training sizes.
 
-To bypass this trap, architecture and regularization must be derived directly from data geometry. For multiclass classification ($K \ge 2$), SmallMLP eliminates neural architecture search by scaling the width of the first hidden layer deterministically:
+SmallMLP sets the classification width from the training size $n$, feature count $d$ and class count $K$. Write $b_2=2$ and $b_K=2K$ for $K>2$. The first hidden layer has width
 \begin{equation}
 \label{eq:width_w1}
-w_1 = \max\left(2K, \; \min\left(\left\lfloor \alpha \sqrt{n K \sqrt{d}} \right\rfloor, \; 4n\right)\right)
+w_1 = \max\left(b_K, \; \min\left(\left\lfloor \alpha \sqrt{n K \sqrt{d}} \right\rfloor, \; 4n\right)\right)
 \end{equation}
-where $\alpha$ is a structural scaling constant derived during meta-training (see Section~\ref{sec:meta_protocol}), with subsequent layers decaying geometrically according to:
+with coefficient $\alpha=6$. Subsequent classification layers use $\beta=0.7$ and
 \begin{equation}
 \label{eq:width_wl}
 w_l = \max\left(K, \; \left\lfloor w_1 \cdot \beta^{l-1} \right\rfloor\right)
 \end{equation}
-For continuous regression ($K=1$), where output capacity does not scale with class cardinality, this formulation simplifies to a deterministic width bound $w_1 = \min(2n, 128)$. Similarly, dropout probability across both regimes is governed by a clamped dimensional ratio:
+For regression, all hidden layers have the same width $\min(128,\max(16,2n))$. Both estimators set dropout by
 \begin{equation}
 \label{eq:dropout}
 p_{\text{drop}} = \min\left(\max\left(3 \cdot \frac{d}{n}, \; 0.1\right), \; 0.5\right)
 \end{equation}
-This enforces strict capacity bottlenecks that prevent noise memorization without requiring a validation sweep.
+These choices fix the architecture before training. SmallMLP still reserves an internal validation subset for early stopping.
 
 \subsection{Marginal Coverage and Locally Weighted Prediction Intervals}
 \label{sec:uq}
@@ -110,82 +117,47 @@ Let $\widehat f$ be a regression predictor fitted without using the calibration 
 \mathbb P\!\left\{Y_{\rm new}\in C_{\rm split}(X_{\rm new})\right\}\geq 1-\alpha,
 \qquad C_{\rm split}(x)=[\widehat f(x)-R_{(k)},\,\widehat f(x)+R_{(k)}].
 \end{equation}
-When the scores are almost surely distinct, the new score has uniform rank among the $m+1$ scores, giving marginal coverage $k/(m+1)$ \cite{vovk2005algorithmic, shafer2008tutorial}. This probability averages over the calibration set and the new observation. Coverage within a particular noise regime can differ.
+When the scores are almost surely distinct, the new score has uniform rank among the $m+1$ scores, giving marginal coverage $k/(m+1)$ \cite{vovk2005algorithmic, angelopoulos2023gentle}. This probability averages over the calibration set and the new observation. Coverage within a particular noise regime can differ.
 
-The locally weighted variant in our experiment assigns more weight to residuals from calibration points near the test input in the fitted embedding $h(x)$. Its half-width is a weighted quantile of the calibration residuals. The protocol sets the kernel bandwidth to the median distance between distinct calibration observations in the embedding:
+The experimental local procedure uses embeddings $h(x)$ obtained with the same feature standardization and trained backbone as the regression predictor. Its Gaussian kernel uses the median pairwise calibration distance as its bandwidth,
 \begin{equation}
 \label{eq:h_cal}
 h_{\text{cal}}=\operatorname{median}_{1\leq i<j\leq m}\|h(X_i)-h(X_j)\|_2 .
 \end{equation}
-The weights depend on the test input, so the unweighted rank argument in Equation~\eqref{eq:conformal_cov} does not establish coverage for this rule. Localized procedures with finite-sample guarantees use additional steps, such as calibrating the quantile level \cite{guan2023lcp} or randomizing the localization step \cite{hore2025rlcp}. We report the coverage of the median-bandwidth procedure empirically in Section~\ref{sec:conformal_uq}.
+For test input $x$, the calibration weights are $\exp[-\|h(x)-h(X_i)\|_2^2/(2h_{\rm cal}^2)]$. The procedure assigns unit weight to a test score at $+\infty$ and takes the weighted $(1-\alpha)$ quantile. If the bandwidth is effectively zero it uses one. When the quantile is infinite, it caps the radius at the largest calibration residual. The test-dependent weights and the cap preclude transferring the unweighted rank argument in Equation~\eqref{eq:conformal_cov}. Other localized methods derive guarantees by calibrating the quantile level \cite{guan2023lcp} or randomizing the localization step \cite{hore2025rlcp}. We evaluate this particular procedure empirically.
 
 \section{Real-World Applications and Experimental Methodology}
 
-Having established the mathematical bottlenecks, we now outline the experimental methodology designed to test these limits in practice.
-
 \subsection{Real-World Benchmark Domains}
-We selected hold-out benchmark datasets that natively exhibit the pathologies of small tabular data. We classify these into three primary constraint domains:
-\begin{itemize}
-    \item \textbf{Clinical Medicine ($d \approx n$ Regime):} High-dimensional, low-sample datasets (e.g., \textit{Hepatitis}: $n=155, d=19$; \textit{Breast Cancer}: $n=569, d=30$). This regime induces ill-conditioned covariance matrices and critically tests algorithms lacking intrinsic dimensional regularization.
-    \item \textbf{Physical and Engineering Sciences (Heteroscedastic Noise):} Experimental physical datasets (e.g., \textit{Yacht Hydrodynamics}: $n=308, d=6$; \textit{Energy Efficiency}: $n=768, d=8$) typically exhibit input-dependent noise variance $\sigma^2(x)$, requiring locally adaptive conformal intervals rather than homoscedastic uncertainty.
-    \item \textbf{Physical Sensors and Remote Sensing (Heavy-Tailed Outliers):} Sensor data (e.g., \textit{Ionosphere}: $n=351, d=34$; \textit{Parkinson's}: $n=195, d=22$) frequently contains measurement outliers. These datasets strictly demand robust statistics to prevent models from isolating individual noise spikes.
-\end{itemize}
+The public classification tasks cover clinical outcomes (Hepatitis), diagnostic measurements (Wisconsin Diagnostic Breast Cancer), voice recordings (Parkinson's) and radar returns (Ionosphere). The regression tasks measure yacht resistance and simulated building energy demand. Repeated measurements from one person, hull design or building geometry can share predictive information. We specify the prediction unit and grouping rule for each dataset in Section~\ref{sec:real_results}.
 
-\subsection{Standard Baselines and AutoML Frameworks}
-To establish strict performance boundaries across classification, regression, and uncertainty quantification, we contextualize our targeted solutions against prevailing baselines across six algorithmic families:
-\begin{itemize}
-    \item \textbf{Standard GBDTs (XGBoost / LightGBM):} The de facto tabular baselines \cite{chen2016xgboost, ke2017lightgbm}. We compare default and tuned XGBoost in Section~\ref{sec:tuning_trap}. Subsequent experiments specify their tree and loss settings separately.
-    \item \textbf{Random Forests (RF):} Bagging ensembles that mitigate variance via bootstrap aggregation and feature subsampling without heavy tuning. However, their piecewise-constant orthogonal splits induce structural bias on smooth continuous regression tasks, cannot extrapolate beyond the training bounding box, and lack distribution-free interval calibration.
-    \item \textbf{Standard MLPs:} Unconstrained multilayer perceptrons trained with standard empirical risk minimization (MSE or cross-entropy). Without validation-guided neural architecture search over depth, width, and dropout, fixed-capacity MLPs either memorize noise or underfit, while producing uncalibrated confidence scores.
-    \item \textbf{Gaussian Processes (GPs):} Non-parametric Bayesian models offering principled uncertainty quantification \cite{williams2006gaussian}. While computationally tractable at $n < 1000$, GPs suffer from Euclidean kernel degeneracy when $d \approx n$ and frequently overfit kernel length-scales during Type-II Maximum Likelihood optimization on small samples.
-    \item \textbf{In-Context Foundation Models (TabPFN / TabPFN v2):} A prominent targeted solution for small tabular data that uses a Transformer pre-trained on synthetic structural causal models to perform single-pass approximate Bayesian inference without validation tuning \cite{hollmann2022tabpfn, hollmann2025tabpfn}. While TabPFN v2 extends strong zero-shot accuracy to both classification and regression across hundreds of features ($d \le 500$), its predictive uncertainty remains strictly prior-dependent—lacking distribution-free, finite-sample coverage guarantees under real-world prior mismatch—and it relies on pre-trained neural weights rather than lightweight, transparent from-scratch estimators (see Section~\ref{sec:tabpfn_targeted}).
-    \item \textbf{AutoML Frameworks (AutoGluon / GluonML):} State-of-the-art automated systems that construct multi-layer stack ensembles across diverse model families \cite{erickson2020autogluon}. While dominant on medium-to-large datasets, their reliance on internal out-of-fold validation splits depletes the training signal and induces selection bias on extreme low-sample tasks.
-\end{itemize}
+\subsection{Comparators and Implementations}
+SmallGBM 1.5.0 uses the aggregation rule in Section~\ref{sec:theory} and randomized split candidates. SmallMLP 0.4.0 uses two hidden layers by default, weight decay $1/n$ and internal early stopping. Throughout, a fixed configuration means that no hyperparameter search used that benchmark's test scores. The five-fold training-only search in Section~\ref{sec:tuning_trap} is explicitly identified. The regression interval experiment uses a separate calibration set.
 
-Table~\ref{tab:baselines} synthesizes how each baseline family interacts with the mathematical bottlenecks of Section~\ref{sec:theory} compared to SmallGBM and SmallMLP.
+XGBoost provides tree comparators with the loss and configuration specified for each experiment. A linear baseline tests the contribution of nonlinear structure. The interval experiment also includes a Gaussian process with a fitted noise term. As context, TabPFN v2 uses pretrained in-context prediction on small and medium-sized tables \cite{hollmann2025tabpfn}. Our direct comparisons below concern the models plotted or tabulated.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
-\caption{Mapping Algorithmic Families to Small-Data Mathematical Bottlenecks}
-\vspace{4pt}
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{lllll}
-\toprule
-\textbf{Algorithm} & \textbf{Outlier Sensitivity} & \textbf{Tuning / Split Burden} & \textbf{Uncertainty Validity} & \textbf{Primary Regime / Limitation} \\
-\midrule
-XGBoost / LightGBM & High (unbounded $g_i$) & High ($|\Lambda| \gg 10^2$) & None (point) & Overfits without validation tuning \\
-Random Forest & Moderate (bagging) & Low & Empirical variance & Structural bias on smooth regression \\
-Standard MLP & High (under MSE) & Extreme (arch search) & Uncalibrated & Severe validation overfitting \\
-Gaussian Process & High (Gaussian noise) & Moderate (Type-II ML) & Parametric / Fragile & Fails at $d \approx n$ (kernel degeneracy) \\
-TabPFN / TabPFN v2 & Moderate (prior-bound) & None (in-context) & Approx. Bayesian (prior-dependent) & Targeted foundation model (prior-dependent; pre-trained footprint) \\
-AutoGluon (AutoML) & Moderate (stacking) & Out-of-fold stacking & Empirical / None & Signal depletion on $n < 500$ \\
-\midrule
-\textbf{SmallGBM} & \textbf{Low (median + MAD)} & \textbf{None (tuning-free)} & None (point) & \textbf{Robust classification ($n < 1000$)} \\
-\textbf{SmallMLP} & \textbf{Moderate ($\lambda=1/n$)} & \textbf{Single cal. split ($h_{\text{cal}}$)} & \shortstack[l]{Unweighted: marginal guarantee\\Weighted: empirical coverage} & \textbf{Nonlinear Regr., Multiclass \& UQ ($n < 500$)} \\
-\bottomrule
-\end{tabular}%
-}
-\label{tab:baselines}
+\caption{What each comparison measures.}\label{tab:baselines}
+\small
+\begin{tabular}{@{}p{.28\linewidth}p{.63\linewidth}@{}}\toprule
+Comparison & Quantity estimated \\\midrule
+Tuned and default XGBoost & Matched-size validation optimism and independent-test gain after refitting \\
+Gaussian classification & Test ROC-AUC, accuracy and log loss for linear and tree models over seven training sizes \\
+Target corruption & Within-trial change in test performance as training targets are perturbed \\
+Prediction intervals & Test coverage, high-noise subgroup coverage and mean interval width \\
+Public datasets & Performance of fixed configurations on held-out folds under each dataset's splitting rule \\
+\bottomrule\end{tabular}
 \end{table}
 
-\subsection{Zero-Tuning Implementations: SmallGBM and SmallMLP}
-We evaluate two algorithmic implementations designed to operate strictly without validation tuning. \textbf{SmallGBM} applies the robust median leaf estimation and highly stochastic split selection (evaluating only five random thresholds per feature) to prevent outlier isolation. Its core logic is implemented in a native C backend with 256-bin histograms, yielding a $2\times$--$3\times$ computational speedup over pure Python implementations. \textbf{SmallMLP} implements the deterministic capacity scaling laws ($\alpha = 6.0, \beta = 0.7$), inverse weight decay ($\lambda = 1/n$), and clamped dropout. For regression, we evaluate SmallMLP with unweighted split conformal intervals and with the median-bandwidth procedure described in Section~\ref{sec:uq}.
-
-\subsection{Pre-Trained In-Context Solutions: TabPFN and TabPFN v2}
-\label{sec:tabpfn_targeted}
-Alongside lightweight, from-scratch inductive biases such as SmallGBM and SmallMLP, Prior-Data Fitted Networks represent a distinct, complementary targeted solution to the Small Data Trilemma. Rather than encoding low-sample regularization analytically into leaf estimators or network capacity rules, TabPFN \cite{hollmann2022tabpfn, muller2021transformers} amortizes Bayesian inference by pre-training a Transformer architecture offline on millions of synthetic datasets generated from structural causal models. At deployment, the model conditions directly on the entire training table in a single forward pass—completely bypassing iterative gradient descent and validation-based hyperparameter sweeps. Its second-generation architecture, TabPFN v2 \cite{hollmann2025tabpfn}, substantially expands this paradigm beyond the strict $d \le 100$ classification constraints of the original release, natively supporting both continuous regression and classification across hundreds of features ($d \le 500$) and achieving state-of-the-art zero-shot accuracy on standard small tabular benchmarks.
-
-Within the broader landscape of low-sample learning, pre-trained foundation models and lightweight analytical baselines occupy complementary niches with distinct trade-offs. TabPFN v2 derives its inductive bias from a fixed synthetic prior. Its native predictive uncertainty is prior-dependent. A separate, unweighted split conformal calibration can be applied to a fitted predictor, including TabPFN or SmallMLP, when calibration and test observations are exchangeable (Equation~\eqref{eq:conformal_cov}). A change in distribution between calibration and deployment can violate that assumption. Furthermore, deploying a pre-trained Transformer incurs substantial memory, hardware, and opacity overhead compared to millisecond-scale native C tree ensembles or compact two-layer networks. Consequently, while TabPFN v2 serves as a premier zero-shot foundation baseline when its synthetic prior aligns with the target domain, lightweight from-scratch models like SmallGBM and SmallMLP remain essential when practitioners require transparent inductive biases, explicit outlier resilience, or minimal computational footprints.
-
-\subsection{Meta-Training Protocol and the Avoidance of Data Leakage}
-\label{sec:meta_protocol}
-To ensure a mathematically rigorous evaluation and strictly prevent data leakage, we separate the derivation of algorithmic constants from the final benchmark. All heuristic hyperparameters for SmallGBM and SmallMLP—such as the leaf size threshold $|I| \le 30$ and the structural constant $\alpha = 6.0$—were derived empirically on a disjoint \textit{Meta-Training Set}. This set comprises a diverse collection of small tabular datasets sourced from the \textit{scikit-learn} library and the UCI Machine Learning Repository, \textbf{strictly disjoint} from the evaluation benchmarks. The models were subsequently frozen. We evaluate the frozen methods on the independent \textit{Hold-Out Benchmark Set}. In Section~\ref{sec:tuning_trap}, we also tune an XGBoost comparator using only the training data from each trial.
+\subsection{Development and Evaluation}\label{sec:meta_protocol}
+The classification width coefficients and the leaf-size threshold were fixed for the reported evaluations. Figure~\ref{fig:meta_surface} examines a development grid over network widths. The subsequent public-data comparison uses held-out predictions within each dataset. Prior use of a public dataset during model development can still affect dataset-level comparisons. We therefore treat the public results as benchmark estimates and document known prior exposure.
 
 \section{Empirical Pathologies and Performance Boundaries in the Low-Sample Regime}
 
-\subsection{The Validation Breakdown and Scaling Boundaries}
+\subsection{Validation and Learning Curves}
 
-\subsubsection{Tuning gain and cross-validation optimism at \(n=100\)}
+\subsubsection{Tuning gain and cross-validation optimism at \texorpdfstring{\(n=100\)}{n=100}}
 \label{sec:tuning_trap}
 
 We compared three classifiers on a Gaussian mixture, a nonlinear interaction task, and a null task with labels independent of the features. For each task and each of 20 seeds, all three methods received the same 100 training observations with 10 features. We scored the fitted models on a separate sample of 5,000 observations drawn from the same distribution.
@@ -194,7 +166,7 @@ The first two methods used XGBoost 3.4.1. The baseline used the library's defaul
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.98\textwidth]{tuning.png}
+    \includegraphics[width=0.98\textwidth]{tuning_performance.pdf}
     \caption{Test ROC-AUC after training on 100 observations. Each grey line connects the three methods on the same trial. Points show means across 20 seeds and error bars show pointwise 95\% \(t\)-intervals.}
     \label{fig:tuning_comparison}
 \end{figure}
@@ -203,7 +175,7 @@ On the Gaussian task, tuning improved mean test ROC-AUC from 0.863 to 0.871 (pai
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.92\textwidth]{tuning_diagnostics.png}
+    \includegraphics[width=0.92\textwidth]{tuning_diagnostics.pdf}
     \caption{Paired ROC-AUC differences across 20 seeds. The left panel shows default minus tuned test ROC-AUC after fitting on all 100 observations. Negative values favor tuning. The right panel shows how much the validation gain exceeded the independent-test gain when both were measured using models trained on 80 observations. Dots show individual trials and black markers show means with pointwise 95\% \(t\)-intervals.}
     \label{fig:cv_optimism}
 \end{figure}
@@ -217,22 +189,24 @@ Cross-validation overstated the mean gain by 0.023 ROC-AUC on the Gaussian task,
 
 We drew equally likely binary labels and generated ten features from two Gaussian classes:
 \[
+\begin{gathered}
 Y\sim\operatorname{Bernoulli}(1/2),\qquad
-X\mid Y=y\sim\mathcal{N}\bigl((2y-1)\mu,I_{10}\bigr),\qquad
-\mu=v/\|v\|_2,\quad v=(1,0.75,-0.5,0,0,0,0,0,0,0)^\top .
+X\mid Y=y\sim\mathcal{N}\bigl((2y-1)\mu,I_{10}\bigr),\\
+\mu=v/\|v\|_2,\qquad v=(1,0.75,-0.5,0,0,0,0,0,0,0)^\top .
+\end{gathered}
 \]
 The Bayes score $S=\mu^\top X$ has distribution $\mathcal{N}(1,1)$ in class 1 and $\mathcal{N}(-1,1)$ in class 0. Thresholding at zero gives population accuracy $\Phi(1)=0.8413$. For independent draws from the two classes, their score difference has distribution $\mathcal{N}(2,2)$, so the population ROC-AUC is $\Phi(\sqrt{2})=0.9214$, where $\Phi$ is the standard normal distribution function.
 
-For each of 20 seeds, all models received the same nested training samples of size $n\in\{100,200,500,1000,2000,5000,10000\}$ and the same independent test set of 10,000 observations. SmallGBM used its default configuration. Both XGBoost configurations used histogram trees of depth 3. \texttt{XGBoost-50} used 50 trees, a learning rate of 0.10, and half the features per tree. \texttt{XGBoost-200} used 200 trees, a learning rate of 0.05, and all features per tree.
+For each of 20 seeds, all models shared a test set of 10,000 independent observations and nested training sets of 100, 200, 500, 1,000, 2,000, 5,000 and 10,000 observations. SmallGBM used its default configuration. Both XGBoost configurations used histogram trees of depth 3. \texttt{XGBoost-50} used 50 trees, a learning rate of 0.10, and half the features per tree. \texttt{XGBoost-200} used 200 trees, a learning rate of 0.05, and all features per tree. Because the population log odds are $2\mu^\top X$, we added logistic regression as a linear control when revisiting this experiment. It used $L_2$ regularization ($C=1$), an intercept, the L-BFGS solver and the same unscaled features and splits.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.98\textwidth]{n_crossover_scaling.pdf}
-    \caption{Gaussian-mixture classification. Panels show test ROC-AUC (left), accuracy (center), and log loss (right). Markers are means over 20 seeds. Shading gives pointwise 95\% Student's $t$ confidence intervals for each mean. Dotted lines mark the population Bayes ROC-AUC (0.9214) and accuracy (0.8413). On the measured grid, both XGBoost configurations first exceed SmallGBM in mean accuracy at $n=1000$. For mean ROC-AUC this first occurs at $n=1000$ for \texttt{XGBoost-50} and $n=2000$ for \texttt{XGBoost-200}. \texttt{XGBoost-50} has lower mean log loss than SmallGBM at all seven sizes.}
+    \caption{Generalization on the Gaussian mixture. The panels report test ROC-AUC, accuracy and log loss, respectively. Points are means over 20 seeds, with pointwise 95\% $t$ intervals. Dotted lines show population Bayes ROC-AUC and accuracy. The linear control had the highest mean ROC-AUC at all seven sizes. Both XGBoost variants first exceeded SmallGBM in mean accuracy at $n=1000$.}
     \label{fig:n_crossover}
 \end{figure}
 
-At $n=100$, SmallGBM had higher mean test ROC-AUC (0.8880) than \texttt{XGBoost-50} (0.8735) and \texttt{XGBoost-200} (0.8692). At $n=10{,}000$, the corresponding means were 0.9116, 0.9184, and 0.9186 (Figure~\ref{fig:n_crossover}).
+At $n=100$, mean test ROC-AUC was 0.9034 for logistic regression, 0.8880 for SmallGBM, 0.8735 for \texttt{XGBoost-50} and 0.8692 for \texttt{XGBoost-200}. The paired mean logistic-minus-SmallGBM difference was $+0.0154$ (pointwise 95\% $t$ interval $[0.0116,0.0191]$). At $n=10{,}000$, the corresponding scores were 0.9212, 0.9116, 0.9184 and 0.9186. The linear control approaches the Bayes ROC-AUC for this data-generating process.
 
 We computed the XGBoost-minus-SmallGBM test ROC-AUC difference within each seed. For \texttt{XGBoost-50}, the mean difference changed from $-0.0017$ at $n=500$ to $+0.0017$ at $n=1000$. For \texttt{XGBoost-200}, it changed from $-0.0007$ at $n=1000$ to $+0.0030$ at $n=2000$. These pairs of measured sizes bracket the observed reversals in mean ROC-AUC for this distribution. The grid leaves the ordering at intermediate sizes unresolved.
 
@@ -242,21 +216,21 @@ We computed the XGBoost-minus-SmallGBM test ROC-AUC difference within each seed.
 \subsubsection{Heavy-Tailed Contamination and Label Corruption}
 \label{sec:heavy_tailed_noise}
 
-To empirically test the unbounded influence function bottleneck formalized in Section~\ref{sec:theory}, we evaluate model degradation under progressive target corruption across 10 unclipped random seeds ($0\%, 1\%, 5\%, 10\%,$ and $20\%$ contaminated training labels) while evaluating on clean hold-out test sets. To ensure strict mathematical reproducibility and isolate contamination effects from dataset-specific artifacts, we conduct two controlled stress tests with $d=10$ covariates ($n_{\text{train}} = 300$): (i) binary classification under stochastic label flips on a synthetic nonlinear interaction manifold defined by $X \sim \mathcal{N}(0, I_d)$ and $Y = \mathbb{I}(1.5 X_1 - X_2 + 0.8 X_3 X_4 + 0.5 \varepsilon > 0)$ with $\varepsilon \sim \mathcal{N}(0, 1)$, comparing tuning-free SmallGBM against default XGBoost (\texttt{binary:logistic}, $M=200$, $\text{depth}=3$, $\eta=0.05$); and (ii) continuous regression on the nonlinear Friedman \#1 benchmark ($\sigma_{\varepsilon} = 1.0$) under additive heavy-tailed Cauchy contamination $y_i^{\text{corr}} = y_i + \gamma \cdot \text{Cauchy}(0, 1)$ scaled by the clean training interquartile range $\gamma \propto \operatorname{IQR}(y_{\text{train}})$, comparing SmallMLP, default XGBoost (\texttt{reg:squarederror}), oracle-configured XGBoost (\texttt{reg:absoluteerror}), and a trivial median constant predictor.
+We varied the proportion of corrupted training targets over $0,1,5,10$ and $20\%$ in ten paired trials ($n_{\rm train}=300$, $d=10$). Each task used a fixed clean test set of 5,000 observations. For classification, $X\sim\mathcal N(0,I_d)$ and $Y=\mathbf{1}\{1.5X_1-X_2+0.8X_3X_4+0.5\epsilon>0\}$, where $\epsilon\sim\mathcal N(0,1)$. Randomly selected binary labels were flipped. For Friedman~\#1 regression with unit Gaussian noise, we added independent standard Cauchy draws scaled by the interquartile range of clean training responses to the selected targets. No draws were clipped. All XGBoost models in this sweep used 200 trees, depth 3 and learning rate 0.05. The classifier used logistic loss. Regression comparators used squared error or absolute error. The median constant was fitted to the available training targets.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.98\textwidth]{label_noise_cls.pdf}
-    \caption{\textbf{Binary Classification under Progressive Label Flips (10 Seeds).} On clean data ($0\%$), SmallGBM matches default XGBoost ($0.9265$ vs.\ $0.9286$ mean ROC-AUC). As label corruption increases to $20\%$, default XGBoost suffers a severe collapse to $0.8527$ (a median paired drop of $-0.0773$ AUC) as greedy splits isolate flipped labels. SmallGBM's median leaf estimator and MAD empirical Bayes shrinkage bound the influence of corrupted instances, maintaining $0.9045$ mean ROC-AUC ($3.7\times$ smaller median deterioration).}
+    \caption{Test ROC-AUC under binary training-label flips. Left to right: median ROC-AUC with interquartile range, mean ROC-AUC and median within-trial AUC loss relative to the clean fit. At 20\% flips, the median paired losses were 0.0210 for SmallGBM and 0.0778 for the fixed XGBoost-200 classifier.}
     \label{fig:label_noise_cls}
 \end{figure}
 
-\textbf{Classification Resilience via Median Leaf Aggregation:} As shown in Figure~\ref{fig:label_noise_cls} and Table~\ref{tab:noise_sweep}, SmallGBM achieves statistical parity with default XGBoost on uncorrupted data ($0.9265$ vs.\ $0.9286$ mean ROC-AUC; $0.9270$ vs.\ $0.9272$ median), confirming that stochastic 5-threshold split selection and median leaf aggregation incur no baseline efficiency penalty. However, as label corruption rises, default XGBoost degrades rapidly: at $10\%$ corruption, its mean ROC-AUC drops to $0.9023$, and at $20\%$ it plunges to $0.8527$ (median $0.8499$, a paired deterioration of $-0.0773$ AUC). Because standard GBDTs perform exhaustive split searches and compute leaf weights via second-order Taylor sums (Equation~\ref{eq:taylor_leaf}), they actively isolate flipped labels into low-sample leaves with large log-odds updates. Conversely, SmallGBM restricts split candidates and computes small-leaf weights ($|I| \le 30$) via the sample median (Equation~\ref{eq:median_leaf}) coupled with MAD shrinkage toward the parent node (Equation~\ref{eq:mad_shrinkage}). Consequently, SmallGBM retains a mean ROC-AUC of $0.9204$ at $10\%$ corruption and $0.9045$ (median $0.9065$) at $20\%$ corruption—limiting median AUC loss to just $-0.0205$ ($3.7\times$ lower degradation than XGBoost) without any hyperparameter tuning.
+Mean ROC-AUC on clean labels was 0.9265 for SmallGBM and 0.9286 for XGBoost-200. At 20\% flips it fell to 0.9045 and 0.8527, respectively. For each seed we subtracted its corrupted-data AUC from its clean-data AUC, then took each model's median across the ten seeds. The XGBoost-200 median loss was 3.7 times the SmallGBM loss, and SmallGBM lost less AUC in all ten trials. The comparison changes the entire tree implementation. A within-SmallGBM leaf-estimator ablation would be needed to attribute that difference to the median alone.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.98\textwidth]{cauchy_noise_reg.pdf}
-    \caption{\textbf{Continuous Regression under Heavy-Tailed Cauchy Contamination (Friedman \#1, 10 Seeds).} At $0\%$ noise, SmallMLP achieves the lowest error ($\text{MAE} = 1.338$), outperforming both default XGBoost squared ($1.468$) and XGBoost absolute ($1.557$). Under Cauchy contamination, default XGBoost squared explodes by $14.6\times$ to $21.494$ mean MAE at $20\%$—performing $5.3\times$ worse than a trivial median constant ($4.039$). SmallMLP's capacity bottlenecks constrain mean outlier explosion ($9.260$ mean and $3.882$ median MAE at $20\%$), while illustrating the exact trade-off between smooth $L_2$ and bounded-gradient $L_1$ objectives.}
+    \caption{Friedman~\#1 regression under additive Cauchy contamination. Left to right: median test MAE with interquartile range, mean test MAE and median within-trial MAE increase from the clean fit, across ten trials. The two XGBoost-200 configurations differ in their training loss.}
     \label{fig:cauchy_noise_reg}
 \end{figure}
 
@@ -269,25 +243,23 @@ To empirically test the unbounded influence function bottleneck formalized in Se
 \toprule
 \textbf{Task / Metric} & \textbf{Model} & \textbf{0\% (Clean)} & \textbf{1\% Noise} & \textbf{5\% Noise} & \textbf{10\% Noise} & \textbf{20\% Noise} \\
 \midrule
-Classification (ROC-AUC $\uparrow$) & \textbf{SmallGBM (Ours)} & $0.9265$ ($0.9270$) & $0.9250$ ($0.9232$) & $\mathbf{0.9236}$ ($\mathbf{0.9250}$) & $\mathbf{0.9204}$ ($\mathbf{0.9183}$) & $\mathbf{0.9045}$ ($\mathbf{0.9065}$) \\
- & XGBoost (Default) & $\mathbf{0.9286}$ ($\mathbf{0.9272}$) & $\mathbf{0.9268}$ ($\mathbf{0.9250}$) & $0.9131$ ($0.9120$) & $0.9023$ ($0.9006$) & $0.8527$ ($0.8499$) \\
+Classification (ROC-AUC $\uparrow$) & \textbf{SmallGBM} & $0.9265$ ($0.9270$) & $0.9250$ ($0.9232$) & $\mathbf{0.9236}$ ($\mathbf{0.9250}$) & $\mathbf{0.9204}$ ($\mathbf{0.9183}$) & $\mathbf{0.9045}$ ($\mathbf{0.9065}$) \\
+ & XGBoost-200 (fixed) & $\mathbf{0.9286}$ ($\mathbf{0.9272}$) & $\mathbf{0.9268}$ ($\mathbf{0.9250}$) & $0.9131$ ($0.9120$) & $0.9023$ ($0.9006$) & $0.8527$ ($0.8499$) \\
 \midrule
-Regression (Test MAE $\downarrow$) & \textbf{SmallMLP (Ours)} & $\mathbf{1.338}$ ($\mathbf{1.339}$) & $1.613$ ($\mathbf{1.466}$) & $2.576$ ($2.294$) & $2.839$ ($2.691$) & $9.260$ ($3.882$) \\
- & XGBoost (Default $L_2$) & $1.468$ ($1.473$) & $1.632$ ($1.532$) & $3.399$ ($2.216$) & $3.852$ ($3.080$) & $21.494$ ($9.301$) \\
- & XGBoost (Oracle $L_1$) & $1.557$ ($1.556$) & $\mathbf{1.559}$ ($1.548$) & $\mathbf{1.576}$ ($\mathbf{1.553}$) & $\mathbf{1.614}$ ($\mathbf{1.599}$) & $\mathbf{1.732}$ ($\mathbf{1.702}$) \\
+Regression (Test MAE $\downarrow$) & \textbf{SmallMLP} & $\mathbf{1.338}$ ($\mathbf{1.339}$) & $1.613$ ($\mathbf{1.466}$) & $2.576$ ($2.294$) & $2.839$ ($2.691$) & $9.260$ ($3.882$) \\
+ & XGBoost-200 ($L_2$) & $1.468$ ($1.473$) & $1.632$ ($1.532$) & $3.399$ ($2.216$) & $3.852$ ($3.080$) & $21.494$ ($9.301$) \\
+ & XGBoost-200 ($L_1$) & $1.557$ ($1.556$) & $\mathbf{1.559}$ ($1.548$) & $\mathbf{1.576}$ ($\mathbf{1.553}$) & $\mathbf{1.614}$ ($\mathbf{1.599}$) & $\mathbf{1.732}$ ($\mathbf{1.702}$) \\
  & Median Constant & $4.036$ ($4.033$) & $4.036$ ($4.033$) & $4.038$ ($4.035$) & $4.039$ ($4.038$) & $4.039$ ($4.038$) \\
 \bottomrule
-\multicolumn{7}{l}{\footnotesize \textit{Note:} Values report $\text{Mean} \; (\text{Median})$ across 10 unclipped random seeds.}
+\multicolumn{7}{l}{\footnotesize \textit{Note:} Values report $\text{Mean} \; (\text{Median})$ across 10 random seeds.}
 \end{tabular}%
 }
 \label{tab:noise_sweep}
 \end{table}
 
-\textbf{Regression under Cauchy Contamination and the Loss-Selection Dilemma:} Figure~\ref{fig:cauchy_noise_reg} and Table~\ref{tab:noise_sweep} expose the fragility of unregularized second-order Taylor approximations under heavy-tailed continuous noise. On clean data ($0\%$), SmallMLP achieves the lowest error ($\text{MAE} = 1.338$), outperforming default $L_2$ XGBoost ($1.468$). When Cauchy noise is injected, default $L_2$ XGBoost suffers unbounded gradient explosions ($g_i = \hat{y}_i - y_i$ with constant Hessian $h_i = 1$): while its median MAE at $5\%$ corruption ($2.216$) briefly remains comparable to SmallMLP ($2.294$), extreme outlier seeds already drive its mean MAE up to $3.399$ (versus $2.576$ for SmallMLP). By $20\%$ corruption, default $L_2$ XGBoost explodes to a mean MAE of $21.494$ (median $9.301$)—performing more than $5\times$ worse than a trivial median constant predictor ($4.039$).
+On clean data SmallMLP had the lowest mean MAE (1.338). At 20\% Cauchy contamination, its mean MAE reached 9.260 and its median MAE was 3.882. The squared-error XGBoost-200 fit gave a mean of 21.494 and a median of 9.301. A single seed contributed errors of 54.57 and 145.43, respectively. Under the same contamination, the absolute-error XGBoost-200 configuration had mean MAE 1.732, compared with 1.557 on clean data. These finite-trial summaries illustrate sensitivity to the training objective and to extreme draws. They do not identify the effect of a component of the neural network.
 
-While SmallMLP also optimizes a standard $L_2$ objective, its strict capacity bottlenecks ($w_1 = \min(2n, 128)$, inverse weight decay $\lambda = 1/n$, and clamped dropout) prevent individual neurons from dedicating capacity to isolated Cauchy spikes, cutting mean error by more than half relative to default XGBoost at $20\%$ corruption ($9.260$ vs.\ $21.494$) and maintaining a median MAE ($3.882$) below the constant baseline. Crucially, SmallMLP deliberately retains a smooth $L_2$ objective rather than switching to $L_1$ or Huber loss: while non-smooth $L_1$ gradients bound extreme $20\%$ Cauchy spikes—as demonstrated by Oracle $L_1$ XGBoost (\texttt{reg:absoluteerror}) achieving $1.732$ MAE at $20\%$—constant-magnitude subgradients degrade optimization efficiency on clean smooth manifolds and distort the penultimate embedding geometry $h(x)$ required for locally weighted conformal prediction (Equation~\ref{eq:h_cal}). Indeed, Table~\ref{tab:noise_sweep} confirms that Oracle $L_1$ XGBoost suffers significantly higher baseline error on uncorrupted data ($1.557$ vs.\ SmallMLP's $1.338$). Thus, in a strict zero-tuning regime where target tail behavior is unknown \textit{a priori}, SmallMLP's architectural bottlenecking provides a balanced middle ground: preserving state-of-the-art accuracy on clean data while bounding mean divergence under moderate contamination ($\le 10\%$).
-
-\subsubsection{Prediction Interval Coverage Under Heteroscedasticity and $d \approx n$}
+\subsubsection{Prediction Interval Coverage Under Heteroscedasticity}
 \label{sec:conformal_uq}
 
 We evaluate the test coverage and width of the prediction intervals described in Section~\ref{sec:uq} on a heteroscedastic nonlinear regression problem ($n = 150$, $n_{\text{test}} = 2000$, 20 independent random seeds, target coverage $1 - \alpha = 0.90$). Covariates are drawn as $X \sim \mathcal{N}(0, I_d)$ across both a low-dimensional regime ($d = 10$) and a high-dimensional regime ($d = 100$, where $d \approx n$), with targets generated via $Y = 1.5 X_1 - X_2 + 0.8 X_3 X_4 + \sin(X_5) + \sigma(X)\varepsilon$, $\varepsilon \sim \mathcal{N}(0, 1)$, where $\sigma(X) = 0.25$ for $X_1 \le 0$ and $\sigma(X) = 1.50$ for $X_1 > 0$ (a $6\times$ noise-scale shift). We compare a parametric Gaussian Process (\texttt{GP (Type-II ML)}, ARD-RBF + WhiteKernel fitted on all $n = 150$ samples) against \texttt{SmallMLP} calibrated via a single non-tuned $75/25$ split ($n_{\text{fit}} = 112$, $n_{\text{cal}} = 38$) under both unweighted split conformal prediction (Equation~\eqref{eq:conformal_cov}) and locally weighted conformal prediction over the penultimate bottleneck embedding $h(x)$ (Equation~\eqref{eq:h_cal}).
@@ -295,60 +267,48 @@ We evaluate the test coverage and width of the prediction intervals described in
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.98\textwidth]{conformal_uq.pdf}
-    \caption{Prediction intervals under a sixfold difference in noise scale at $d=10$ and $d=100$ ($n=150$). The panels show observed coverage on the full test set (left), coverage among high-noise observations with $X_1>0$ (center), and the ratio of mean widths in the high- and low-noise groups (right). Results are means over 20 seeds with 95\% confidence intervals. The reference coverage is $90\%$. At $d=10$, the locally weighted SmallMLP interval covered $92.7\%$ overall and $87.4\%$ in the high-noise group.}
+    \caption{Prediction intervals with a sixfold difference in noise scale. Panels show empirical marginal coverage, coverage in the high-noise subgroup and mean interval width. Points are means over the same 20 seeds per dimension, with pointwise 95\% $t$ intervals. The coverage target is 90\%.}
     \label{fig:conformal_uq}
 \end{figure}
 
-For the standard unweighted rule at $m=38$ and target $1-\alpha=0.90$, $k=\lceil39\times0.90\rceil=36$. With exchangeable, almost surely distinct residuals, the 36th calibration residual therefore gives marginal coverage $36/39\approx92.3\%$ (Equation~\eqref{eq:conformal_cov}). The denominator includes the new observation. The fraction $36/38$ is the cumulative fraction of calibration residuals at that cutoff. A finite benchmark can give an empirical coverage different from $36/39$.
+With $m=38$ and $1-\alpha=0.90$, ordinary split conformal uses $k=\lceil39\times0.90\rceil=36$. We directly select the 36th ordered calibration residual. With almost surely distinct exchangeable scores its marginal coverage over calibration sets and future observations is $36/39\approx92.3\%$. Realized benchmark averages can differ.
 
-Figure~\ref{fig:conformal_uq} reports three comparisons.
-\begin{itemize}
-    \item \textbf{Marginal coverage and width.} At $d=10$, unweighted SmallMLP intervals covered $94.3\%$ of test responses with mean width $6.28$. Local weighting reduced mean width to $5.58$ and coverage to $92.7\%$. At $d=100$, the corresponding change was from $9.32$ to $8.54$ in width and from $95.7\%$ to $94.3\%$ in coverage. The Gaussian process had mean marginal coverage of $87.8\%$ and $89.5\%$ at $d=10$ and $d=100$, respectively.
-    \item \textbf{Coverage in the high-noise group.} Among test points with $X_1>0$, coverage of the locally weighted intervals was $87.4\%$ at $d=10$ and $91.3\%$ at $d=100$. The corresponding Gaussian process coverages were $76.0\%$ and $86.0\%$. At $d=10$ the weighted method exceeded the target overall while falling below it in the high-noise group.
-    \item \textbf{Variation in width.} At $d=10$, the locally weighted intervals had mean width $5.74$ in the high-noise group and $5.41$ in the low-noise group (ratio $1.06$). The correlation between width and noise scale was $0.210$. At $d=100$, the ratio rounded to $1.00$ and the correlation was approximately zero. The unweighted interval has constant width within each fitted split by construction.
-\end{itemize}
+\input{interval_results}
 
 \subsection{Component Ablations and Meta-Validation}
 
-\subsubsection{The $\alpha$ and $\beta$ Capacity Surface on the Meta-Training Set}
-As established in Section 2.2, continuous regression ($K=1$) utilizes the deterministic $w_1 = \min(2n, 128)$ width bound, whereas the capacity scaling constants $\alpha$ and $\beta$ in Equations~\eqref{eq:width_w1} and~\eqref{eq:width_wl} specifically govern multiclass representation capacity ($K \ge 2$). To verify that this scaling rule does not rely on fragile hyperparameter tuning or test-set leakage, we evaluate the joint sensitivity of $\alpha \in [2.0, 10.0]$ and $\beta \in [0.5, 0.9]$ across the classification tasks of the disjoint Meta-Training Set.
+\subsubsection{Sensitivity of Classification Accuracy to Width Coefficients}
+We repeated the 45-point classification width grid on three development datasets specified before the rerun: Iris (150 observations), Wine (178) and Statlog Heart (270). Each setting used the same five stratified folds and random seed 42. The median imputer was fitted on the training observations in each fold. Accuracy was averaged first across folds and then across the three datasets. This sensitivity check uses a narrower panel than the historical development grid. The regression backbone uses equal-width layers and is independent of these coefficients.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.68\textwidth]{meta_grid_surface.pdf}
-\caption{Empirical capacity surface across the disjoint Meta-Training Set plotted on a standardized accuracy scale ($[0.76, 0.84]$). Total mean accuracy fluctuates by less than $0.97\%$ across the entire 45-point grid ($[0.7970, 0.8067]$), visually confirming a flat stability plateau. The red bounding box denotes the selected structural prior ($\alpha=6.0, \beta=0.7$).}
+\caption{Mean accuracy on Iris, Wine and Statlog Heart, averaged equally across datasets. The outlined cell marks the coefficients used in the benchmarks ($\alpha=6$, $\beta=0.7$).}
 \label{fig:meta_surface}
 \end{figure}
 
-As illustrated in Figure~\ref{fig:meta_surface}, when viewed on a non-distorted accuracy scale, the performance surface forms a remarkably uniform stability plateau: across a five-fold increase in $\alpha$ and the full spectrum of $\beta$, mean meta-training accuracy varies within a narrow band of $0.97\%$ (from $0.7970$ to $0.8067$). The minor cell-to-cell fluctuations ($\pm 0.2\%$) reflect stochastic weight initialization variance inherent to $n < 500$ rather than structural sensitivity. This confirms that the asymptotic scaling factor $\sqrt{n K \sqrt{d}}$ captures the intrinsic geometry of the low-sample regime, rendering the network largely invariant to local constant perturbations.
+Mean accuracy ranged from 0.9146 to 0.9288, with the highest cell at $(\alpha,\beta)=(7,0.6)$. The coefficients already in use, $(6,0.7)$, gave 0.9233 (0.9533 on Iris, 0.9833 on Wine and 0.8333 on Statlog Heart). They were 0.55 percentage points below the highest cell. This grid describes sensitivity with one split and initialization seed. The three development datasets are distinct from the six retrospective evaluation datasets in Table~\ref{tab:real_data}.
 
-To lock in a single operating point prior to hold-out evaluation, we apply two structural boundary conditions. First, we reject boundary configurations with minimal decay ($\beta = 0.9$, such as $(\alpha=5.0, \beta=0.9)$ at $0.8067$), as they fail to compress the second hidden layer and inflate parameter count. Second, while aggressive compression ($\beta \le 0.6$, such as $(\alpha=6.0, \beta=0.5)$ at $0.8064$) yields marginally higher point averages on specific random seeds, slashing penultimate layer width by $\ge 40\%$ risks representation collapse and metric distortion in the embedding space $h(x)$ required for locally weighted conformal calibration (Equation~\eqref{eq:h_cal}). Consequently, we freeze the central operating point $\alpha=6.0, \beta=0.7$ ($0.8040$ accuracy, within $0.27\%$ noise tolerance of the grid maximum) as a conservative structural prior that balances parameter compression ($30\%$ decay) with metric preservation for uncertainty quantification.
-
-\subsubsection{Depth Ablation: Architectural Saturation Beyond Two Hidden Layers}
+\subsubsection{Depth Ablation at Fixed Training Settings}
 \label{sec:depth_ablation}
 
-While Equations~\eqref{eq:width_w1} and~\eqref{eq:width_wl} govern layer width deterministically, eliminating Neural Architecture Search also requires fixing network depth $L$ prior to deployment. Starting from the minimal two-layer bottleneck architecture ($L=2$) required to support geometric layer compression ($\beta$) and extract a low-dimensional penultimate embedding $h(x)$ for locally weighted conformal calibration (Equation~\ref{eq:h_cal}), we sweep the number of hidden layers $L \in \{2, 3, 4, 5\}$ across sample sizes $n \in \{100, 200, 400\}$ ($d=10$, $n_{\text{test}} = 5000$, 10 independent random seeds). We evaluate both Friedman \#1 regression (Test MAE) and nonlinear classification (Test Accuracy), keeping all capacity scaling, regularization rules, and internal optimization settings ($\text{max epochs} = 500$, $\text{patience} = 30$, with zero hyperparameter search) fixed across depths.
+We varied the hidden-layer count $L$ from two to five on Friedman~\#1 regression and nonlinear binary classification, using $n\in\{100,200,400\}$, $d=10$, ten paired seeds and 5,000 independent test observations per trial. Width rules and optimization settings were fixed across depths (maximum 500 epochs, early-stopping patience 30). Parameter count increased with depth.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.96\textwidth]{depth_ablation.pdf}
-    \caption{\textbf{Depth Ablation ($L \in \{2, 3, 4, 5\}$) Across Sample Sizes $n \in \{100, 200, 400\}$ (10 Seeds, Mean $\pm$ Pointwise 95\% $t$-Intervals).} Left: Mean test MAE on Friedman \#1 regression. Right: Mean test accuracy on nonlinear classification. Extending depth beyond two hidden layers provides no consistent generalization benefit: regression error increases monotonically with depth at $n=200$ and $n=400$, while classification at $n=100$ suffers severe optimization instability and accuracy collapse for $L \ge 4$.}
+    \caption{Test MAE for Friedman~\#1 regression and test accuracy for nonlinear classification across depths and training sizes. Points show ten-trial means with pointwise 95\% $t$ intervals. Paired comparisons in the text use the same seed at both depths.}
     \label{fig:depth_ablation}
 \end{figure}
 
-As shown in Figure~\ref{fig:depth_ablation}, increasing network depth beyond $L=2$ hidden layers fails to improve generalization while substantially inflating parameter count:
-\begin{itemize}
-    \item \textbf{Friedman \#1 Regression:} At $n=100$, test MAE remains statistically flat across depths ($2.166$ at $L=2$ vs.\ $2.126$ at $L=3$ and $2.153$ at $L=5$, all within overlapping 95\% $t$-intervals). However, as the training signal strengthens at $n=200$ and $n=400$, deeper architectures degrade monotonically: mean MAE rises from $1.571$ ($L=2$) to $1.716$ ($L=5$) at $n=200$, and from $1.231$ ($L=2$) to $1.325$ ($L=5$) at $n=400$. Meanwhile, trainable parameter count expands by $3.8\times$ (from $\approx 18\text{k}$ at $L=2$ to $\approx 67.5\text{k}$ at $L=5$), confirming that excess depth introduces unnecessary variance without reducing approximation bias.
-    \item \textbf{Nonlinear Classification:} At $n=200$ and $n=400$, accuracy exhibits a flat-to-slightly-declining profile as depth increases ($0.861 \to 0.858$ at $n=200$; $0.880 \to 0.875$ at $n=400$), even as parameter count grows nearly $1.8\times$ (reaching $\approx 120\text{k}$ parameters at $n=400, L=5$). Crucially, in the extreme low-sample regime ($n=100$), deeper networks suffer severe optimization collapse: mean accuracy drops by nearly $7$ percentage points from $0.816$ ($L=2$) to $0.750$ ($L=4$) and $0.747$ ($L=5$), accompanied by a dramatic explosion in seed-to-seed variance.
-\end{itemize}
-Collectively, these results confirm that depth is not a productive degree of freedom for $n < 500$. Fixing SmallMLP at $L=2$ hidden layers achieves the best balance of accuracy, optimization stability, and parameter parsimony without requiring validation-based architecture search.
+At $n=100$, the two-layer classifier exceeded the five-layer variant in mean accuracy by 6.9 percentage points, with a wide paired 95\% $t$ interval from $-1.8$ to $+15.6$ points. For Friedman regression at $n=400$, adding three layers increased MAE by 0.094 (paired interval $[0.065,0.122]$). These observations support using two layers as a practical default on the tasks examined. The ablation changes both depth and parameter count.
 
-\subsection{True Negative Results and Structural Limitations}
+\subsection{Gaussian Location Estimation}
 \label{sec:negative_results}
 
 We examine the efficiency of estimating a Gaussian location and relate this separate experiment to the observed classification results in Figure~\ref{fig:n_crossover}.
 
-\subsubsection{Gaussian Location Estimation and Classifier Performance}
+\subsubsection{Sample Mean and Sample Median}
 \label{sec:gaussian_penalty}
 
 We drew independent samples from $\mathcal{N}(0,1)$ and used the sample mean and the sample median to estimate the common center at zero. At each sample size we averaged squared estimation errors over 5,000 draws.
@@ -356,7 +316,7 @@ We drew independent samples from $\mathcal{N}(0,1)$ and used the sample mean and
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.96\textwidth]{gaussian_efficiency_penalty.pdf}
-    \caption{\textbf{The Gaussian Efficiency Penalty of Robust Estimation.} Left: On uncorrupted Gaussian data, the sample mean achieves the Cram\'{e}r-Rao lower bound ($n \times \text{MSE} \to 1$), whereas the sample median converges to the asymptotic variance limit $\pi/2 \approx 1.571$. Right: The empirical MSE ratio $\text{MSE}(\text{median}) / \text{MSE}(\text{mean})$ across sample sizes, reaching $1.558$ ($95\%$ Monte Carlo CI: $[1.505, 1.610]$) at $n = 10^4$. Both panels concern estimation of a Gaussian location.}
+    \caption{\textbf{The Gaussian Efficiency Penalty of Robust Estimation.} Left: On uncorrupted Gaussian data, the sample mean achieves the Cram\'{e}r-Rao lower bound ($n \times \text{MSE} \to 1$), whereas $n$ times the MSE of the sample median converges to $\pi/2 \approx 1.571$. Right: The empirical MSE ratio $\text{MSE}(\text{median}) / \text{MSE}(\text{mean})$ across sample sizes, reaching $1.558$ ($95\%$ Monte Carlo CI: $[1.505, 1.610]$) at $n = 10^4$. Both panels concern estimation of a Gaussian location.}
     \label{fig:gaussian_penalty}
 \end{figure}
 
@@ -368,15 +328,22 @@ As shown in Figure~\ref{fig:gaussian_penalty}, while the sample mean is the mini
 where $f(0)$ is the density of $\mathcal{N}(0,\sigma^2)$ at its median. The resulting asymptotic relative efficiency of the median is $2/\pi$. This calculation describes an independent Gaussian sample. At each boosting step the classification pseudo-residuals depend on binary labels and the current fitted probabilities. Attributing the ROC-AUC reversals in Figure~\ref{fig:n_crossover} to the leaf estimator would require varying that component while holding the other tree settings fixed.
 
 The choice of metric also affects the comparison. At $n=100$, \texttt{XGBoost-50} had lower mean test log loss than SmallGBM (0.455 versus 0.471), even though SmallGBM ranked the classes better by ROC-AUC. At $n=10{,}000$, the corresponding log losses were 0.372 and 0.437. Log loss measures the quality of probability predictions. Identifying systematic underconfidence would require a separate calibration analysis.
-
+\subsection{Performance on Six Public Datasets}\label{sec:real_results}
+\input{real_data_results}
 \section{Conclusion}
 \label{sec:conclusion}
 
-Machine learning on small tabular datasets ($n < 1000$) is governed by structural bottlenecks that standard big-data workflows cannot resolve through hyperparameter tuning. In this paper, we formalized these constraints as the Trilemma of Small Data Learning—the inability to simultaneously achieve low variance, low bias, and calibrated uncertainty without depleting scarce training signals via validation splits—and evaluated two zero-tuning algorithmic baselines, SmallGBM and SmallMLP, as targeted case studies.
+A gain measured while selecting hyperparameters can overstate the gain after refitting. At $n=100$, cross-validation on random labels overstated the gain from tuning by 0.063 ROC-AUC, while tuning on a Gaussian task still improved held-out performance. On the separate Gaussian scaling benchmark, logistic regression had the highest mean ROC-AUC across the grid. Selecting a model whose decision boundary matches the signal can matter even at the smallest training size.
 
-Our empirical benchmarks measure how model performance changes with sample size, dimensionality, and label contamination. At $n=100$, five-fold cross-validation overstated the gain from tuning XGBoost by 0.063 ROC-AUC on random labels. On the Gaussian mixture, tuning improved test ROC-AUC from 0.863 to 0.871 after refitting. SmallGBM achieved 0.884 on the same trials. On the Gaussian mixture, the paired mean ROC-AUC difference favored \texttt{XGBoost-50} over SmallGBM by $n=1000$ and \texttt{XGBoost-200} by $n=2000$. At the preceding measured size for each comparison ($500$ and $1000$, respectively), SmallGBM had the higher mean ROC-AUC. In the separate label-flip experiment, the median ROC-AUC decrease at $20\%$ corruption was $3.7$ times as large for the tested XGBoost configuration as for SmallGBM. For neural architectures, our meta-validation and depth ablations confirm that deterministic capacity scaling ($\alpha = 6.0, \beta = 0.7$) and a fixed two-layer bottleneck ($L = 2$) eliminate neural architecture search while preventing the optimization collapse observed in deeper networks at $n = 100$. Under a sixfold difference in noise scale, locally weighted SmallMLP intervals were narrower on average than unweighted intervals. Their observed marginal coverage was $92.7\%$ at $d=10$ and $94.3\%$ at $d=100$. At $d=10$, coverage fell to $87.4\%$ in the high-noise group. The finite-sample guarantee in Equation~\eqref{eq:conformal_cov} applies to the unweighted procedure under exchangeability.
+SmallGBM lost less discrimination than the tested XGBoost-200 configuration under random binary label flips. Heavy-tailed regression responses produced a different ordering, with the absolute-error boosting configuration attaining the lowest mean error at 20\% contamination. Under heteroscedastic noise, local interval weights increased both average coverage and average width relative to ordinary split conformal. Whole-model comparisons, repeated trials of a single generator and public-data folds each support different conclusions. Extending these results to new applications requires an evaluation on the relevant outcomes and sampling units.
 
-At the largest measured training size ($n=10{,}000$), all three classifiers remained below the population Bayes ROC-AUC for the Gaussian mixture. The separate location experiment quantified the variance cost of estimating the center of a normal sample with the median. Similarly, SmallMLP's smooth $L_2$ objective remains vulnerable to extreme ($20\%$) heavy-tailed Cauchy outliers compared to $L_1$-loss boosting. By delineating both the strengths and mathematical limits of zero-tuning inductive biases, this work provides a rigorous, empirically grounded foundation for future research in low-sample tabular learning.
+\section*{Impact Statement}
+A small laboratory or clinical research group may have enough observations to fit several predictors but too few to estimate small performance differences precisely. On random labels, selecting the highest cross-validation score produced an apparent improvement even though the features contained no signal. Recording the search and evaluating the selected model on independent observations can prevent an optimistic estimate from guiding which measurements or experiments receive resources. The Gaussian experiment also illustrates the value of retaining a low-cost linear comparator when the signal may be simple.
+
+Prediction intervals affect which cases receive additional measurements or review. In our simulation at $d=10$, the locally weighted method covered about 93\% of responses overall and 87\% in the high-noise group. A team planning around the overall figure would underestimate missed responses in that group. Reporting group-specific coverage together with interval width makes that trade-off visible. The clinical benchmarks measure predictions on retrospective public data. Discrimination on these data does not establish clinical benefit, and a patient-level split cannot measure transport to a new hospital. Decisions affecting patients would require evaluation in the intended population, including the consequences of missed cases and unnecessary follow-up.
+
+\section*{Data and Code Availability}
+The accompanying source package includes the revised benchmark scripts, dataset identifiers, split protocols and numerical summaries. The project repository is \url{https://github.com/nsdmlk/SmallData-Trilemma}. Public dataset sources and the units used for splitting are also identified in Section~\ref{sec:real_results}.
 
 \section*{Acknowledgements}
 
@@ -394,5 +361,5 @@ and experiments.
 the manuscript structure, and provided methodological feedback.
 
 \bibliographystyle{unsrt}
-\bibliography{references,coverage_sources}
+\bibliography{references}
 \end{document}

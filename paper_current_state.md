@@ -1,3 +1,4 @@
+> **Archived planning document.** This file records the original hypotheses. The [revised manuscript](Paper.pdf) and [results summary](README.md) report the experiments and their outcomes.
 
 # Summary of Current Paper State (Sections 1–5)
 
