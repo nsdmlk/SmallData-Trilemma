@@ -34,8 +34,12 @@ If you use this paper or the associated code in your research, please cite it as
 ```bibtex
 @misc{emelyanov2026smalldata,
   title={Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes},
-  author={Emelyanov, Ilya and Dobrydin, Dmitrii and Hamza, Muhammad},
-  year={2026}
+  author={Emelyanov, Ilya and Dobrydin, Dmitrii and Hamza, Muhammad and Khan, Malak Abid Ali},
+  year={2026},
+  eprint={XXXX.XXXXX},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  note={Preprint}
 }
 ```
 
