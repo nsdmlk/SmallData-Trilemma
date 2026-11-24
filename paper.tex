@@ -1,46 +1,52 @@
-\documentclass{article}
+\documentclass[journal]{IEEEtran}
 
-\usepackage{arxiv}
-\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-\usepackage{url}            % simple URL typesetting
-\usepackage{booktabs}       % professional-quality tables
-\usepackage{amsfonts}       % blackboard math symbols
-\usepackage{amsmath}        % mathematical operators and formatting
-\usepackage{nicefrac}       % compact symbols for 1/2, etc.
-\usepackage{microtype}      % microtypography
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
-\usepackage{float}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{microtype}
 \usepackage[hidelinks]{hyperref}
 
-\raggedbottom
+\begin{document}
 
 \title{Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes}
 
-\author{
-  \begin{tabular}{cccc}
-    \textbf{Ilya Emelyanov}\footnotemark[1] & \textbf{Dmitrii Dobrydin} & \textbf{Muhammad Hamza} & \textbf{Malak Abid Ali Khan} \\
-    \footnotesize\texttt{1820262250@bit.edu.cn} & \footnotesize\texttt{1820262226@bit.edu.cn} & \footnotesize\texttt{7520250266@bit.edu.cn} & \footnotesize\texttt{malak@bit.edu.cn}
-  \end{tabular} \\[2ex]
-  \textbf{Beijing Institute of Technology, Beijing, China}
-}
+\author{Ilya~Emelyanov\textsuperscript{*},
+        Dmitrii~Dobrydin,
+        Muhammad~Hamza,
+        and~Malak~Abid~Ali~Khan%
+\thanks{I. Emelyanov, D. Dobrydin, and M. Hamza are with the Beijing Institute of Technology, Beijing 100081, China (e-mail: 1820262250@bit.edu.cn; 1820262226@bit.edu.cn; 7520250266@bit.edu.cn). \textsuperscript{*}Corresponding author.}%
+\thanks{M. A. A. Khan is with the School of Information and Electronics, Beijing Institute of Technology, Beijing 100081, China (e-mail: malak@bit.edu.cn).}}
 
-\begin{document}
+\markboth{IEEE Transactions on Artificial Intelligence,~Vol.~XX, No.~XX, Month~2026}%
+{Emelyanov \MakeLowercase{\textit{et al.}}: Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes}
+
 \maketitle
-\footnotetext[1]{Corresponding author.}
 
 \begin{abstract}
 Small tabular datasets leave few observations for choosing a model and assessing its predictions. We examine these competing demands in controlled simulations and on six public datasets, using SmallGBM and SmallMLP as fixed-configuration case studies. Three results illustrate why the choice of evaluation matters. First, at $n=100$, five-fold cross-validation overstated the gain from tuning XGBoost by 0.063 ROC-AUC on random labels, while tuning improved independent-test ROC-AUC by 0.0078 on a Gaussian mixture. Second, when 20\% of binary training labels were flipped, the median within-trial ROC-AUC loss was 0.0210 for SmallGBM and 0.0778 for a fixed 200-tree XGBoost configuration. A separate regression experiment showed the sensitivity of squared-error training to heavy-tailed responses. Third, in a heteroscedastic regression experiment, locally weighted SmallMLP intervals covered about one percentage point more test responses than ordinary split conformal intervals at both tested dimensions. Their mean widths also increased. On a Gaussian classification task with linear log odds, logistic regression achieved the highest mean ROC-AUC at all seven training sizes. These experiments identify settings in which a small-data model helps and quantify the cost of its assumptions.
 \end{abstract}
 
+\begin{IEEEkeywords}
+Small data machine learning, tabular learning, conformal prediction, robust statistics, gradient boosting, uncertainty quantification.
+\end{IEEEkeywords}
+
+\section*{Impact Statement}
+A small laboratory or clinical research group may have enough observations to fit several predictors but too few to estimate small performance differences precisely. On random labels, selecting the highest cross-validation score produced an apparent improvement even though the features contained no signal. Recording the search and evaluating the selected model on independent observations can prevent an optimistic estimate from guiding which measurements or experiments receive resources. The Gaussian experiment also illustrates the value of retaining a low-cost linear comparator when the signal may be simple.
+
+Prediction intervals affect which cases receive additional measurements or review. In our simulation at $d=10$, the locally weighted method covered about 93\% of responses overall and 87\% in the high-noise group. A team planning around the overall figure would underestimate missed responses in that group. Reporting group-specific coverage together with interval width makes that trade-off visible. The clinical benchmarks measure predictions on retrospective public data. Discrimination on these data does not establish clinical benefit, and a patient-level split cannot measure transport to a new hospital. Decisions affecting patients would require evaluation in the intended population, including the consequences of missed cases and unnecessary follow-up.
+
 \section{Introduction}
 
-When observations are expensive to acquire, a practitioner must decide how much data to spend on fitting, model selection and assessment. We use the term \emph{trilemma} as an organizing framework for three objectives: limiting estimation variance, controlling approximation bias and quantifying uncertainty. The appropriate trade-off depends on the data-generating process and on the metric used to compare predictions.
+\IEEEPARstart{W}{hen} observations are expensive to acquire, a practitioner must decide how much data to spend on fitting, model selection and assessment. We use the term \emph{trilemma} as an organizing framework for three objectives: limiting estimation variance, controlling approximation bias and quantifying uncertainty. The appropriate trade-off depends on the data-generating process and on the metric used to compare predictions.
 
 Boosted trees and regularized neural networks are established methods for tabular prediction \cite{chen2016xgboost,ke2017lightgbm,kadra2021well,grinsztajn2022tree}. With a small validation sample, searching a set of configurations can favor those that happened to score well on that sample \cite{cawley2010selection,varoquaux2018cross}. This makes two questions worth distinguishing. How well does validation estimate the gain from tuning? How much does the configuration selected by that search improve predictions after refitting on all available training data?
 
 We examine these questions using two fixed-configuration estimators. SmallGBM combines randomized split selection with robust aggregation of classification residuals. SmallMLP uses dataset size and dimensionality to set its architecture and regularization. A third question arises when using its predictions to construct intervals: how do interval width, overall coverage and coverage in a high-noise subgroup change when calibration residuals receive local weights? We compare the models on paired synthetic trials and on six public classification and regression datasets. The controlled trials vary sample size, target contamination and noise scale, while the dataset comparisons measure performance under specified splitting protocols.
 
-\subsection*{Related work}
+\subsection{Related Work}
 
 Several approaches to tabular prediction make model complexity a choice during training. TabNet uses sequential attention to select features for each observation \cite{arik2021tabnet}. A comparison of residual networks, tabular Transformers and boosted trees found that their relative performance varied across tasks under a common evaluation protocol \cite{gorishniy2021revisiting}. Automated systems can also combine models. Auto-sklearn uses prior evaluations to initialize a search over pipelines \cite{feurer2015automl}, whereas AutoGluon-Tabular combines predictors through multilayer stacking \cite{erickson2020autogluon}. Our controlled search experiment examines a single part of this process, the gain estimated when selecting among configurations of one model family.
 
@@ -67,13 +73,12 @@ c_I=\begin{cases}
 m_I,& |I|\leq30,\\
 \sum_{i\in I} a_i r_i / \sum_{i\in I} a_i,& |I|>30,
 \end{cases}
-\qquad a_i=(|r_i-m_I|+s_0)^{-1}.
 \end{equation}
-For small nodes, the scale $s_I$ is $1.4826$ times the median absolute deviation about $m_I$, with $s_I=s_0$ when that deviation is zero. For larger nodes it is the weighted standard deviation about $c_I$ using the same weights $a_i$. The update shrinks the center toward the parent value $w_P$:
+with weights $a_i=(|r_i-m_I|+s_0)^{-1}$. For small nodes, the scale $s_I$ is $1.4826$ times the median absolute deviation about $m_I$, with $s_I=s_0$ when that deviation is zero. For larger nodes it is the weighted standard deviation about $c_I$ using the same weights $a_i$. The update shrinks the center toward the parent value $w_P$:
 \begin{equation}
 \label{eq:mad_shrinkage}
-u_I=\frac{s_I^2}{|I|s_0^2},\qquad
-\gamma_I=\frac{u_I^{3/2}}{1+u_I^{3/2}},\qquad
+u_I=\frac{s_I^2}{|I|s_0^2},\quad
+\gamma_I=\frac{u_I^{3/2}}{1+u_I^{3/2}},\quad
 w_I=(1-\gamma_I)c_I+\gamma_I w_P.
 \end{equation}
 The finite-sample resistance of a median to extreme observations concerns a fixed node \cite{huber2009robust}. An ensemble also learns its node boundaries and re-estimates residuals after each tree. Section~\ref{sec:heavy_tailed_noise} evaluates the complete classifiers under label flips.
@@ -111,9 +116,8 @@ Let $\widehat f$ be a regression predictor fitted without using the calibration 
 \begin{equation}
 \label{eq:conformal_cov}
 \mathbb P\!\left\{Y_{\rm new}\in C_{\rm split}(X_{\rm new})\right\}\geq 1-\alpha,
-\qquad C_{\rm split}(x)=[\widehat f(x)-R_{(k)},\,\widehat f(x)+R_{(k)}].
 \end{equation}
-When the scores are almost surely distinct, the new score has uniform rank among the $m+1$ scores, giving marginal coverage $k/(m+1)$ \cite{vovk2005algorithmic, angelopoulos2023gentle}. This probability averages over the calibration set and the new observation. Coverage within a particular noise regime can differ.
+where $C_{\rm split}(x)=[\widehat f(x)-R_{(k)},\,\widehat f(x)+R_{(k)}]$. When the scores are almost surely distinct, the new score has uniform rank among the $m+1$ scores, giving marginal coverage $k/(m+1)$ \cite{vovk2005algorithmic, angelopoulos2023gentle}. This probability averages over the calibration set and the new observation. Coverage within a particular noise regime can differ.
 
 The experimental local procedure uses embeddings $h(x)$ obtained with the same feature standardization and trained backbone as the regression predictor. Its Gaussian kernel uses the median pairwise calibration distance as its bandwidth,
 \begin{equation}
@@ -132,11 +136,11 @@ SmallGBM 1.5.0 uses the aggregation rule in Section~\ref{sec:theory} and randomi
 
 XGBoost provides tree comparators with the loss and configuration specified for each experiment. A linear baseline tests the contribution of nonlinear structure. The interval experiment also includes a Gaussian process with a fitted noise term. As context, TabPFN v2 uses pretrained in-context prediction on small and medium-sized tables \cite{hollmann2025tabpfn}. Our direct comparisons below concern the models plotted or tabulated.
 
-\begin{table}[htbp]
+\begin{table}[!t]
 \centering
-\caption{What each comparison measures.}\label{tab:baselines}
-\small
-\begin{tabular}{@{}p{.28\linewidth}p{.63\linewidth}@{}}\toprule
+\caption{What Each Comparison Measures}\label{tab:baselines}
+\footnotesize
+\begin{tabular}{@{}p{.32\columnwidth}p{.62\columnwidth}@{}}\toprule
 Comparison & Quantity estimated \\\midrule
 Tuned and default XGBoost & Matched-size validation optimism and independent-test gain after refitting \\
 Gaussian classification & Test ROC-AUC, accuracy and log loss for linear and tree models over seven training sizes \\
@@ -153,54 +157,51 @@ The classification width coefficients and the leaf-size threshold were fixed for
 
 \subsection{Validation and Learning Curves}
 
-\subsubsection{Tuning gain and cross-validation optimism at \texorpdfstring{\(n=100\)}{n=100}}
+\subsubsection{Tuning Gain and Cross-Validation Optimism at \texorpdfstring{\(n=100\)}{n=100}}
 \label{sec:tuning_trap}
 
 We compared three classifiers on a Gaussian mixture, a nonlinear interaction task, and a null task with labels independent of the features. For each task and each of 20 seeds, all three methods received the same 100 training observations with 10 features. We scored the fitted models on a separate sample of 5,000 observations drawn from the same distribution.
 
 The first two methods used XGBoost 3.4.1. The baseline used the library's default model hyperparameters. For the tuned model, we evaluated 25 candidates: the default configuration and the 24 combinations of \texttt{max\_depth} \(\in\{2,3,6\}\), \texttt{learning\_rate} \(\in\{0.03,0.1\}\), \texttt{n\_estimators} \(\in\{50,200\}\), and \texttt{min\_child\_weight} \(\in\{1,5\}\). All candidates used the same five shuffled, stratified folds (80 training and 20 validation observations per fold). We selected the configuration with the highest mean validation ROC-AUC, with the default listed first to break ties in its favor, and refitted it on all 100 observations. We also fitted default XGBoost and SmallGBM 1.5.0 on all 100 observations, using SmallGBM's default model hyperparameters.
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.98\textwidth]{tuning_performance.pdf}
+    \includegraphics[width=0.95\textwidth]{tuning_performance.pdf}
     \caption{Test ROC-AUC after training on 100 observations. Each grey line connects the three methods on the same trial. Points show means across 20 seeds and error bars show pointwise 95\% \(t\)-intervals.}
     \label{fig:tuning_comparison}
-\end{figure}
+\end{figure*}
 
 On the Gaussian task, tuning improved mean test ROC-AUC from 0.863 to 0.871 (paired gain \(+0.0078\), 95\% CI \([+0.0031,+0.0124]\)). On the nonlinear task the corresponding scores were 0.890 and 0.892 (paired gain \(+0.0023\), 95\% CI \([-0.0033,+0.0080]\)). SmallGBM had the highest mean test ROC-AUC on these two tasks, at 0.884 and 0.901, respectively. On the null task all three means were approximately 0.499, close to the population ROC-AUC of 0.5 (Figure~\ref{fig:tuning_comparison}).
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.92\textwidth]{tuning_diagnostics.pdf}
+    \includegraphics[width=0.88\textwidth]{tuning_diagnostics.pdf}
     \caption{Paired ROC-AUC differences across 20 seeds. The left panel shows default minus tuned test ROC-AUC after fitting on all 100 observations. Negative values favor tuning. The right panel shows how much the validation gain exceeded the independent-test gain when both were measured using models trained on 80 observations. Dots show individual trials and black markers show means with pointwise 95\% \(t\)-intervals.}
     \label{fig:cv_optimism}
-\end{figure}
+\end{figure*}
 
 To measure how well cross-validation estimated the benefit of tuning, we computed the selected configuration's mean validation ROC-AUC minus the default configuration's on the same folds. For comparison, we refitted both configurations on each original 80-observation training fold, scored them on the independent test set, and averaged their paired test differences over the five folds. Subtracting this matched-size test gain from the validation gain gives the quantity in the right panel of Figure~\ref{fig:cv_optimism}.
 
 Cross-validation overstated the mean gain by 0.023 ROC-AUC on the Gaussian task, 0.017 on the nonlinear task, and 0.063 on the null task. On the null task, the apparent validation gain was 0.062 while the matched-size test gain was \(-0.0006\). Thus the search identified a validation advantage even when the features carried no information about the labels. On the Gaussian task, the apparent advantage was also optimistic, although tuning improved the final model's test score. The experiment measures selection optimism for one grid and one training size. Testing the scaling in Equation~\eqref{eq:val_bound} would require varying those quantities.
 
-\subsubsection{Sample size and ROC-AUC on a Gaussian mixture}
+\subsubsection{Sample Size and ROC-AUC on a Gaussian Mixture}
 \label{sec:n_crossover}
 
 We drew equally likely binary labels and generated ten features from two Gaussian classes:
-\[
-\begin{gathered}
-Y\sim\operatorname{Bernoulli}(1/2),\qquad
-X\mid Y=y\sim\mathcal{N}\bigl((2y-1)\mu,I_{10}\bigr),\\
-\mu=v/\|v\|_2,\qquad v=(1,0.75,-0.5,0,0,0,0,0,0,0)^\top .
-\end{gathered}
-\]
+\begin{align*}
+Y &\sim \operatorname{Bernoulli}(1/2), \quad X\mid Y=y \sim \mathcal{N}\bigl((2y-1)\mu, I_{10}\bigr), \\
+\mu &= v/\|v\|_2, \quad v = (1,0.75,-0.5,0,0,0,0,0,0,0)^\top .
+\end{align*}
 The Bayes score $S=\mu^\top X$ has distribution $\mathcal{N}(1,1)$ in class 1 and $\mathcal{N}(-1,1)$ in class 0. Thresholding at zero gives population accuracy $\Phi(1)=0.8413$. For independent draws from the two classes, their score difference has distribution $\mathcal{N}(2,2)$, so the population ROC-AUC is $\Phi(\sqrt{2})=0.9214$, where $\Phi$ is the standard normal distribution function.
 
 For each of 20 seeds, all models shared a test set of 10,000 independent observations and nested training sets of 100, 200, 500, 1,000, 2,000, 5,000 and 10,000 observations. SmallGBM used its default configuration. Both XGBoost configurations used histogram trees of depth 3. \texttt{XGBoost-50} used 50 trees, a learning rate of 0.10, and half the features per tree. \texttt{XGBoost-200} used 200 trees, a learning rate of 0.05, and all features per tree. Because the population log odds are $2\mu^\top X$, we added logistic regression as a linear control when revisiting this experiment. It used $L_2$ regularization ($C=1$), an intercept, the L-BFGS solver and the same unscaled features and splits.
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.98\textwidth]{n_crossover_scaling.pdf}
+    \includegraphics[width=0.95\textwidth]{n_crossover_scaling.pdf}
     \caption{Generalization on the Gaussian mixture. The panels report test ROC-AUC, accuracy and log loss, respectively. Points are means over 20 seeds, with pointwise 95\% $t$ intervals. Dotted lines show population Bayes ROC-AUC and accuracy. The linear control had the highest mean ROC-AUC at all seven sizes. Both XGBoost variants first exceeded SmallGBM in mean accuracy at $n=1000$.}
     \label{fig:n_crossover}
-\end{figure}
+\end{figure*}
 
 At $n=100$, mean test ROC-AUC was 0.9034 for logistic regression, 0.8880 for SmallGBM, 0.8735 for \texttt{XGBoost-50} and 0.8692 for \texttt{XGBoost-200}. The paired mean logistic-minus-SmallGBM difference was $+0.0154$ (pointwise 95\% $t$ interval $[0.0116,0.0191]$). At $n=10{,}000$, the corresponding scores were 0.9212, 0.9116, 0.9184 and 0.9186. The linear control approaches the Bayes ROC-AUC for this data-generating process.
 
@@ -214,27 +215,27 @@ We computed the XGBoost-minus-SmallGBM test ROC-AUC difference within each seed.
 
 We varied the proportion of corrupted training targets over $0,1,5,10$ and $20\%$ in ten paired trials ($n_{\rm train}=300$, $d=10$). Each task used a fixed clean test set of 5,000 observations. For classification, $X\sim\mathcal N(0,I_d)$ and $Y=\mathbf{1}\{1.5X_1-X_2+0.8X_3X_4+0.5\epsilon>0\}$, where $\epsilon\sim\mathcal N(0,1)$. Randomly selected binary labels were flipped. For Friedman~\#1 regression with unit Gaussian noise, we added independent standard Cauchy draws scaled by the interquartile range of clean training responses to the selected targets. No draws were clipped. All XGBoost models in this sweep used 200 trees, depth 3 and learning rate 0.05. The classifier used logistic loss. Regression comparators used squared error or absolute error. The median constant was fitted to the available training targets.
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.98\textwidth]{label_noise_cls.pdf}
+    \includegraphics[width=0.95\textwidth]{label_noise_cls.pdf}
     \caption{Test ROC-AUC under binary training-label flips. Left to right: median ROC-AUC with interquartile range, mean ROC-AUC and median within-trial AUC loss relative to the clean fit. At 20\% flips, the median paired losses were 0.0210 for SmallGBM and 0.0778 for the fixed XGBoost-200 classifier.}
     \label{fig:label_noise_cls}
-\end{figure}
+\end{figure*}
 
 Mean ROC-AUC on clean labels was 0.9265 for SmallGBM and 0.9286 for XGBoost-200. At 20\% flips it fell to 0.9045 and 0.8527, respectively. For each seed we subtracted its corrupted-data AUC from its clean-data AUC, then took each model's median across the ten seeds. The XGBoost-200 median loss was 3.7 times the SmallGBM loss, and SmallGBM lost less AUC in all ten trials. The comparison changes the entire tree implementation. A within-SmallGBM leaf-estimator ablation would be needed to attribute that difference to the median alone.
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.98\textwidth]{cauchy_noise_reg.pdf}
+    \includegraphics[width=0.95\textwidth]{cauchy_noise_reg.pdf}
     \caption{Friedman~\#1 regression under additive Cauchy contamination. Left to right: median test MAE with interquartile range, mean test MAE and median within-trial MAE increase from the clean fit, across ten trials. The two XGBoost-200 configurations differ in their training loss.}
     \label{fig:cauchy_noise_reg}
-\end{figure}
+\end{figure*}
 
-\begin{table}[H]
+\begin{table*}[!t]
 \centering
 \caption{Mean and Median Test Performance Across Progressive Target Corruption (10/10 Seeds Retained)}
-\vspace{4pt}
-\resizebox{\textwidth}{!}{%
+\label{tab:noise_sweep}
+\footnotesize
 \begin{tabular}{llccccc}
 \toprule
 \textbf{Task / Metric} & \textbf{Model} & \textbf{0\% (Clean)} & \textbf{1\% Noise} & \textbf{5\% Noise} & \textbf{10\% Noise} & \textbf{20\% Noise} \\
@@ -242,16 +243,14 @@ Mean ROC-AUC on clean labels was 0.9265 for SmallGBM and 0.9286 for XGBoost-200.
 Classification (ROC-AUC $\uparrow$) & \textbf{SmallGBM} & $0.9265$ ($0.9270$) & $0.9250$ ($0.9232$) & $\mathbf{0.9236}$ ($\mathbf{0.9250}$) & $\mathbf{0.9204}$ ($\mathbf{0.9183}$) & $\mathbf{0.9045}$ ($\mathbf{0.9065}$) \\
  & XGBoost-200 (fixed) & $\mathbf{0.9286}$ ($\mathbf{0.9272}$) & $\mathbf{0.9268}$ ($\mathbf{0.9250}$) & $0.9131$ ($0.9120$) & $0.9023$ ($0.9006$) & $0.8527$ ($0.8499$) \\
 \midrule
-Regression (Test MAE $\downarrow$) & \textbf{SmallMLP} & $\mathbf{1.338}$ ($\mathbf{1.339}$) & $1.613$ ($\mathbf{1.466}$) & $2.576$ ($2.294$) & $2.839$ ($2.691$) & $9.260$ ($3.882$) \\
+Regression (Test MAE $\downarrow$) & \textbf{SmallMLP} & $\mathbf{1.338}$ ($\mathbf{1.339}$) & $1.613$ ($1.466$) & $2.576$ ($2.294$) & $2.839$ ($2.691$) & $9.260$ ($3.882$) \\
  & XGBoost-200 ($L_2$) & $1.468$ ($1.473$) & $1.632$ ($1.532$) & $3.399$ ($2.216$) & $3.852$ ($3.080$) & $21.494$ ($9.301$) \\
  & XGBoost-200 ($L_1$) & $1.557$ ($1.556$) & $\mathbf{1.559}$ ($1.548$) & $\mathbf{1.576}$ ($\mathbf{1.553}$) & $\mathbf{1.614}$ ($\mathbf{1.599}$) & $\mathbf{1.732}$ ($\mathbf{1.702}$) \\
  & Median Constant & $4.036$ ($4.033$) & $4.036$ ($4.033$) & $4.038$ ($4.035$) & $4.039$ ($4.038$) & $4.039$ ($4.038$) \\
 \bottomrule
 \multicolumn{7}{l}{\footnotesize \textit{Note:} Values report $\text{Mean} \; (\text{Median})$ across 10 random seeds.}
-\end{tabular}%
-}
-\label{tab:noise_sweep}
-\end{table}
+\end{tabular}
+\end{table*}
 
 On clean data SmallMLP had the lowest mean MAE (1.338). At 20\% Cauchy contamination, its mean MAE reached 9.260 and its median MAE was 3.882. The squared-error XGBoost-200 fit gave a mean of 21.494 and a median of 9.301. A single seed contributed errors of 54.57 and 145.43, respectively. Under the same contamination, the absolute-error XGBoost-200 configuration had mean MAE 1.732, compared with 1.557 on clean data. These finite-trial summaries illustrate sensitivity to the training objective and to extreme draws. They do not identify the effect of a component of the neural network.
 
@@ -260,12 +259,12 @@ On clean data SmallMLP had the lowest mean MAE (1.338). At 20\% Cauchy contamina
 
 We evaluate the test coverage and width of the prediction intervals described in Section~\ref{sec:uq} on a heteroscedastic nonlinear regression problem ($n = 150$, $n_{\text{test}} = 2000$, 20 independent random seeds, target coverage $1 - \alpha = 0.90$). Covariates are drawn as $X \sim \mathcal{N}(0, I_d)$ across both a low-dimensional regime ($d = 10$) and a high-dimensional regime ($d = 100$, where $d \approx n$), with targets generated via $Y = 1.5 X_1 - X_2 + 0.8 X_3 X_4 + \sin(X_5) + \sigma(X)\varepsilon$, $\varepsilon \sim \mathcal{N}(0, 1)$, where $\sigma(X) = 0.25$ for $X_1 \le 0$ and $\sigma(X) = 1.50$ for $X_1 > 0$ (a $6\times$ noise-scale shift). We compare a parametric Gaussian Process (\texttt{GP (Type-II ML)}, ARD-RBF + WhiteKernel fitted on all $n = 150$ samples) against \texttt{SmallMLP} calibrated via a single non-tuned $75/25$ split ($n_{\text{fit}} = 112$, $n_{\text{cal}} = 38$) under both unweighted split conformal prediction (Equation~\eqref{eq:conformal_cov}) and locally weighted conformal prediction over the penultimate bottleneck embedding $h(x)$ (Equation~\eqref{eq:h_cal}).
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.98\textwidth]{conformal_uq.pdf}
+    \includegraphics[width=0.95\textwidth]{conformal_uq.pdf}
     \caption{Prediction intervals with a sixfold difference in noise scale. Panels show empirical marginal coverage, coverage in the high-noise subgroup and mean interval width. Points are means over the same 20 seeds per dimension, with pointwise 95\% $t$ intervals. The coverage target is 90\%.}
     \label{fig:conformal_uq}
-\end{figure}
+\end{figure*}
 
 With $m=38$ and $1-\alpha=0.90$, ordinary split conformal uses $k=\lceil39\times0.90\rceil=36$. We directly select the 36th ordered calibration residual. With almost surely distinct exchangeable scores its marginal coverage over calibration sets and future observations is $36/39\approx92.3\%$. Realized benchmark averages can differ.
 
@@ -276,9 +275,9 @@ With $m=38$ and $1-\alpha=0.90$, ordinary split conformal uses $k=\lceil39\times
 \subsubsection{Sensitivity of Classification Accuracy to Width Coefficients}
 We repeated the 45-point classification width grid on three development datasets specified before the rerun: Iris (150 observations), Wine (178) and Statlog Heart (270). Each setting used the same five stratified folds and random seed 42. The median imputer was fitted on the training observations in each fold. Accuracy was averaged first across folds and then across the three datasets. This sensitivity check uses a narrower panel than the historical development grid. The regression backbone uses equal-width layers and is independent of these coefficients.
 
-\begin{figure}[H]
+\begin{figure}[!t]
 \centering
-\includegraphics[width=0.68\textwidth]{meta_grid_surface.pdf}
+\includegraphics[width=0.92\columnwidth]{meta_grid_surface.pdf}
 \caption{Mean accuracy on Iris, Wine and Statlog Heart, averaged equally across datasets. The outlined cell marks the coefficients used in the benchmarks ($\alpha=6$, $\beta=0.7$).}
 \label{fig:meta_surface}
 \end{figure}
@@ -290,12 +289,12 @@ Mean accuracy ranged from 0.9146 to 0.9288, with the highest cell at $(\alpha,\b
 
 We varied the hidden-layer count $L$ from two to five on Friedman~\#1 regression and nonlinear binary classification, using $n\in\{100,200,400\}$, $d=10$, ten paired seeds and 5,000 independent test observations per trial. Width rules and optimization settings were fixed across depths (maximum 500 epochs, early-stopping patience 30). Parameter count increased with depth.
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.96\textwidth]{depth_ablation.pdf}
+    \includegraphics[width=0.92\textwidth]{depth_ablation.pdf}
     \caption{Test MAE for Friedman~\#1 regression and test accuracy for nonlinear classification across depths and training sizes. Points show ten-trial means with pointwise 95\% $t$ intervals. Paired comparisons in the text use the same seed at both depths.}
     \label{fig:depth_ablation}
-\end{figure}
+\end{figure*}
 
 At $n=100$, the two-layer classifier exceeded the five-layer variant in mean accuracy by 6.9 percentage points, with a wide paired 95\% $t$ interval from $-1.8$ to $+15.6$ points. For Friedman regression at $n=400$, adding three layers increased MAE by 0.094 (paired interval $[0.065,0.122]$). These observations support using two layers as a practical default on the tasks examined. The ablation changes both depth and parameter count.
 
@@ -309,12 +308,12 @@ We examine the efficiency of estimating a Gaussian location and relate this sepa
 
 We drew independent samples from $\mathcal{N}(0,1)$ and used the sample mean and the sample median to estimate the common center at zero. At each sample size we averaged squared estimation errors over 5,000 draws.
 
-\begin{figure}[H]
+\begin{figure*}[!t]
     \centering
-    \includegraphics[width=0.96\textwidth]{gaussian_efficiency_penalty.pdf}
+    \includegraphics[width=0.92\textwidth]{gaussian_efficiency_penalty.pdf}
     \caption{\textbf{The Gaussian Efficiency Penalty of Robust Estimation.} Left: On uncorrupted Gaussian data, the sample mean achieves the Cram\'{e}r-Rao lower bound ($n \times \text{MSE} \to 1$), whereas $n$ times the MSE of the sample median converges to $\pi/2 \approx 1.571$. Right: The empirical MSE ratio $\text{MSE}(\text{median}) / \text{MSE}(\text{mean})$ across sample sizes, reaching $1.558$ ($95\%$ Monte Carlo CI: $[1.505, 1.610]$) at $n = 10^4$. Both panels concern estimation of a Gaussian location.}
     \label{fig:gaussian_penalty}
-\end{figure}
+\end{figure*}
 
 As shown in Figure~\ref{fig:gaussian_penalty}, while the sample mean is the minimum-variance unbiased estimator under Gaussian noise ($n \times \text{MSE} \approx 1.00$ across all $n$), the sample median incurs a strict variance penalty governed by the asymptotic distribution of sample quantiles:
 \begin{equation}
@@ -324,8 +323,10 @@ As shown in Figure~\ref{fig:gaussian_penalty}, while the sample mean is the mini
 where $f(0)$ is the density of $\mathcal{N}(0,\sigma^2)$ at its median. The resulting asymptotic relative efficiency of the median is $2/\pi$. This calculation describes an independent Gaussian sample. At each boosting step the classification pseudo-residuals depend on binary labels and the current fitted probabilities. Attributing the ROC-AUC reversals in Figure~\ref{fig:n_crossover} to the leaf estimator would require varying that component while holding the other tree settings fixed.
 
 The choice of metric also affects the comparison. At $n=100$, \texttt{XGBoost-50} had lower mean test log loss than SmallGBM (0.455 versus 0.471), even though SmallGBM ranked the classes better by ROC-AUC. At $n=10{,}000$, the corresponding log losses were 0.372 and 0.437. Log loss measures the quality of probability predictions. Identifying systematic underconfidence would require a separate calibration analysis.
+
 \subsection{Performance on Six Public Datasets}\label{sec:real_results}
 \input{real_data_results}
+
 \section{Conclusion}
 \label{sec:conclusion}
 
@@ -333,23 +334,32 @@ A gain measured while selecting hyperparameters can overstate the gain after ref
 
 SmallGBM lost less discrimination than the tested XGBoost-200 configuration under random binary label flips. Heavy-tailed regression responses produced a different ordering, with the absolute-error boosting configuration attaining the lowest mean error at 20\% contamination. Under heteroscedastic noise, local interval weights increased both average coverage and average width relative to ordinary split conformal. Whole-model comparisons, repeated trials of a single generator and public-data folds each support different conclusions. Extending these results to new applications requires an evaluation on the relevant outcomes and sampling units.
 
-\section*{Impact Statement}
-A small laboratory or clinical research group may have enough observations to fit several predictors but too few to estimate small performance differences precisely. On random labels, selecting the highest cross-validation score produced an apparent improvement even though the features contained no signal. Recording the search and evaluating the selected model on independent observations can prevent an optimistic estimate from guiding which measurements or experiments receive resources. The Gaussian experiment also illustrates the value of retaining a low-cost linear comparator when the signal may be simple.
-
-Prediction intervals affect which cases receive additional measurements or review. In our simulation at $d=10$, the locally weighted method covered about 93\% of responses overall and 87\% in the high-noise group. A team planning around the overall figure would underestimate missed responses in that group. Reporting group-specific coverage together with interval width makes that trade-off visible. The clinical benchmarks measure predictions on retrospective public data. Discrimination on these data does not establish clinical benefit, and a patient-level split cannot measure transport to a new hospital. Decisions affecting patients would require evaluation in the intended population, including the consequences of missed cases and unnecessary follow-up.
-
 \section*{Data and Code Availability}
 The accompanying source package includes the revised benchmark scripts, dataset identifiers, split protocols and numerical summaries. The project repository is \url{https://github.com/nsdmlk/SmallData-Trilemma}. Public dataset sources and the units used for splitting are also identified in Section~\ref{sec:real_results}.
 
 \section*{Acknowledgements}
-
-The authors thank Beijing Institute of Technology for providing
-a supportive academic environment and opportunities for research
-and collaboration.
+The authors thank Beijing Institute of Technology for providing a supportive academic environment and opportunities for research and collaboration.
 
 \section*{Author Contributions}
 Ilya Emelyanov conceived the study, developed the mathematical framework, and implemented the SmallGBM and SmallMLP libraries. Dmitrii Dobrydin designed and conducted the benchmarks and experiments. Muhammad Hamza contributed to validation, helped revise the manuscript structure, and provided methodological feedback. Malak Abid Ali Khan provided research supervision, critical review of the methodology, and manuscript editing.
 
-\bibliographystyle{unsrt}
+\bibliographystyle{IEEEtran}
 \bibliography{references}
+
+\begin{IEEEbiographynophoto}{Ilya Emelyanov}
+is currently pursuing an undergraduate degree in computer science at Beijing Institute of Technology, Beijing, China. His research interests include small-data tabular learning, inductive priors, distribution-free conformal calibration, and value-based reinforcement learning. He develops open-source implementations in C and PyTorch, including SmallGBM, SmallMLP, and from-scratch reinforcement learning baselines.
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Dmitrii Dobrydin}
+is currently pursuing his undergraduate degree at Beijing Institute of Technology, Beijing, China. His research interests include machine learning benchmarking, statistical evaluation, and applied deep learning.
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Muhammad Hamza}
+is with the Beijing Institute of Technology, Beijing, China. His research interests include machine learning methodology and empirical model validation.
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Malak Abid Ali Khan}
+received the Ph.D. degree in Control Science and Engineering from Beijing Institute of Technology, Beijing, China, in 2024. He is currently a Postdoctoral Researcher with the School of Information and Electronics, Beijing Institute of Technology. His research interests include federated and distributed machine learning, deep learning, Internet of Things (IoT), LoRa/LoRaWAN, and vehicular networks.
+\end{IEEEbiographynophoto}
+
 \end{document}
