@@ -32,14 +32,14 @@ In a small cohort, reusing the validation score that selected a model can exagge
 If you use this paper or the associated code in your research, please cite it as follows:
 
 ```bibtex
-@misc{emelyanov2026smalldata,
-  title={Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes},
-  author={Emelyanov, Ilya and Dobrydin, Dmitrii and Hamza, Muhammad and Khan, Malak Abid Ali},
-  year={2026},
-  eprint={XXXX.XXXXX},
-  archivePrefix={arXiv},
-  primaryClass={cs.LG},
-  note={Preprint}
+@misc{emelyanov2026smalldatamachinelearning,
+      title={Small data machine learning: the trilemma of low-sample tabular regimes}, 
+      author={Ilya Emelyanov and Dmitrii Dobrydin and Muhammad Hamza and Malak Abid Ali Khan},
+      year={2026},
+      eprint={2611.30118},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2611.30118}, 
 }
 ```
 

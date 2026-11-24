@@ -16,8 +16,12 @@ authors:
 
 title: "Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes"
 version: 0.1.0
-date-released: "2026-11-23"
+date-released: "2026-11-24"
 url: "https://github.com/nsdmlk/SmallData-Trilemma"
+identifiers:
+  - type: doi
+    value: "10.48550/arXiv.2611.30118"
+    description: "arXiv DOI"
 preferred-citation:
   type: article
   title: "Small Data Machine Learning: The Trilemma of Low-Sample Tabular Regimes"
@@ -31,4 +35,5 @@ preferred-citation:
     - family-names: "Khan"
       given-names: "Malak Abid Ali"
   year: 2026
-  notes: "Preprint under preparation for arXiv."
+  notes: "Preprint available at arXiv:2611.30118"
+  url: "https://arxiv.org/abs/2611.30118"
